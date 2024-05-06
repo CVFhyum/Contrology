@@ -36,8 +36,6 @@ def parse_header(header: bytes) -> tuple:
     return data_length, recipient_code
 
 
-
-
 # Takes care of decompressing and decoding the data
 def parse_raw_data(data: bytes) -> str:
     return zlib.decompress(data).decode('utf-8', 'ignore')

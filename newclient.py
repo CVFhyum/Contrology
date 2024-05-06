@@ -28,7 +28,6 @@ def send_continuous_screenshots(sock: socket.socket):
             sock.sendall(ready_data)
 
 
-
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
     client.connect((SERVER_IP, SERVER_PORT))
     self_code = client.recv(RECIPIENT_HEADER_LENGTH).decode()
