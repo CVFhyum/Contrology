@@ -3,7 +3,7 @@ Use **create_sendable_data()** and pass the following arguments:
 - Data in the form of bytes, with no header
 - 10 Character Recipient Code
 
-You will get bytes to send.
+You will get ready bytes to send.
 
 ## How do you receive data?
 Wait for a header of length **HEADER_LENGTH**\
