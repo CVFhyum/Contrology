@@ -1,5 +1,9 @@
 from constants import DATA_HEADER_LENGTH, RECIPIENT_HEADER_LENGTH, HEADER_LENGTH
 
+# Implementation of a header. A header is always HEADER_LENGTH long
+# The data length and the recipient code are concatenated to each other
+# The data length is DATA_HEADER_LENGTH long (padded with whitespaces)
+# The recipient code is RECIPIENT_HEADER_LENGTH long
 class Header:
     def __init__(self, data_length_raw, recipient_code):
         self.data_length_raw = data_length_raw

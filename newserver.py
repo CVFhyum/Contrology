@@ -8,6 +8,7 @@ import screeninfo
 import select
 import random as r
 from datetime import datetime
+import ssl
 
 # Mine
 from configuration import *
@@ -16,46 +17,70 @@ from constants import *
 from header import Header
 from message_handler import MessageHandler
 
-def generate_alphanumeric_code(existing_client_ids: dict):
-    code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(10)])  # Make new code
-    while code in existing_client_ids.keys() or code == SERVER_CODE or code == ALL_CODE:  # Check code doesn't exist, if it does make another one
-        code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(10)])
-    return code
+# When a socket raises an error, it should be immediately closed gracefully.
+# This function removes it from clients, client_ids, and closes it.
+def handle_sock_closing(sock: socket.socket):
+    clients.remove(sock)
+    for code, socket in client_ids.items():
+        if socket is sock:
+            print(f"[{get_hhmmss()}] Client Disconnected {sock.getsockname()} | {code}")
+            del client_ids[code]
+            break
+    sock.close()
 
+# When the server detects data incoming from an existing socket, this function is called.
+# This function listens out for headers, and uses those to listen to data that is later resent.
+def handle_client(sock):
+    try:
+        header = sock.recv(HEADER_LENGTH)  # Receive the header
+        data_length,recipient_code = parse_header(header)  # Parse the header
+        data = recvall(sock,data_length)  # Receive all the data
+        data = parse_raw_data(data)  # Parse the data
+        # TODO: handle messages that are meant for the server
+        data = data.encode('utf-8')  # Encode the data
+        data = create_sendable_data(data,recipient_code) # Wrap the data so it's ready to be resent
+        m_handler.update(recipient_code,data)
+    except Exception as e:
+        print(f"Error handling socket: {e}") # todo: remove this
+        handle_sock_closing(sock)
 
-SCREEN_WIDTH, SCREEN_HEIGHT = get_resolution_of_primary_monitor()
+m_handler = MessageHandler()
+clients = []  # list of all client socket objects
+client_ids = {}  # alphanumeric id: client_socket
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2**30)
-    m_handler = MessageHandler()
-    clients = []  # list of all client socket objects
-    client_ids = {}  # alphanumeric id: client_socket
+def main():
+    screen_width, screen_height = get_resolution_of_primary_monitor()
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server = ssl.wrap_socket(server, ssl_version=ssl.PROTOCOL_TLSv1_2)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2**30) # Make send buffer 2^30 bytes long
 
     print(f"Server started on IP {SERVER_IP} and port {SERVER_PORT}")
     server.bind((SERVER_IP,SERVER_PORT))
     server.listen(5)
 
-    while True:
-        TIME = get_hhmmss()  # Returns a time string in the format hh:mm:ss
-        rlist, wlist, xlist = select.select([server] + clients,[],[])
-        for sock in rlist:
-            if sock is server:  # New connection pending
-                # Accept the connection, add the client, assign a code, log their connection, and send them their code
-                client, addr = server.accept()
-                clients.append(client)
-                new_code = generate_alphanumeric_code(client_ids)
-                client_ids.update({new_code: client})
-                print(f"[{TIME}] New Client Connected {addr} | Assigned code {new_code}")
-                client.send(new_code.encode('utf-8'))  # Send the client their code
-            else:  # Start receiving headers
-                header = sock.recv(HEADER_LENGTH) # buggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-                data_length, recipient_code = parse_header(header)
-                data = recvall(sock, data_length)
-                ic(data_length, recipient_code)
-                data = parse_raw_data(data)
-                data = data.encode('utf-8')
-                data = create_sendable_data(data, recipient_code)
-                m_handler.update(recipient_code, data)
+    try:
+        while True:
+            TIME = get_hhmmss()  # Returns a time string in the format hh:mm:ss
+            rlist, wlist, xlist = select.select([server] + clients,[],[])
+            for sock in rlist:
+                if sock is server:  # New connection pending
+                    # Accept the connection, add the client, assign a code, log their connection, and send them their code
+                    client, addr = server.accept()
+                    clients.append(client)
+                    new_code = generate_alphanumeric_code(client_ids)
+                    client_ids.update({new_code: client})
+                    print(f"[{TIME}] New Client Connected {addr} | {new_code}")
+                    client.send(new_code.encode('utf-8'))  # Send the client their code
+                else:  # Incoming data from existing client, so handle them
+                    handle_client(sock)
+            # End
+            m_handler.send_all(client_ids)
+    except KeyboardInterrupt:
+        print("Server interrupted...")
+    finally:
+        for client in clients:
+            client.close()
+        server.close()
 
-        # End
-        m_handler.send_all(client_ids)
+if __name__ == "__main__":
+    main()

@@ -1,11 +1,19 @@
 import zlib
 import screeninfo
 from header import Header
-from constants import DATA_HEADER_LENGTH, RECIPIENT_HEADER_LENGTH, HEADER_LENGTH
+from constants import *
 from datetime import datetime
 from icecream import ic
+import random as r
+from PIL import Image, ImageTk
 
+# With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
+def get_geometry_string(window_width, window_height):
+    screen_width, screen_height = get_resolution_of_primary_monitor()
+    x_offset, y_offset = int((screen_width-window_width)/2), int((screen_height-window_height)/2)
+    return f"{window_width}x{window_height}+{x_offset}+{y_offset}"
 
+# Get resolution of monitor that is marked as primary by the OS.
 def get_resolution_of_primary_monitor():
     for m in screeninfo.get_monitors():
         if m.is_primary:
@@ -18,8 +26,8 @@ def recvall(sock, length) -> bytes:
     buffer = b''
     while len(buffer) < length: # Since we keep adding to buffer, we will continue if it hasn't surpassed the desired length
         data = sock.recv(length - len(buffer))
-        if not data:
-            raise Exception("Error occured while trying to receive data")
+        if not data: # Client disconnected during data receipt?
+            raise Exception("Error occurred while trying to receive data")
         buffer += data
     return buffer
 
@@ -29,6 +37,7 @@ def create_sendable_data(data: bytes, recipient_code: str):
     data_header = Header(len(data), recipient_code)
     return data_header.get_header_bytes() + data
 
+# Given a header, parse it into its components (data length, recipient code) and return them.
 def parse_header(header: bytes) -> tuple:
     header = header.decode('utf-8')
     data_length = int(header[:DATA_HEADER_LENGTH])
@@ -40,5 +49,14 @@ def parse_header(header: bytes) -> tuple:
 def parse_raw_data(data: bytes) -> str:
     return zlib.decompress(data).decode('utf-8', 'ignore')
 
+# Get the time in the form of HH:MM:SS (Example: 14:37:06)
 def get_hhmmss():
     return str(datetime.now().time()).split('.')[0]
+
+# Generate a 10 character alphanumeric code for every client that connects to the server
+# This code is used for identifying clients.
+def generate_alphanumeric_code(existing_client_ids: dict):
+    code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(10)])  # Make new code
+    while code in existing_client_ids.keys() or code == SERVER_CODE or code == ALL_CODE:  # Check code doesn't exist, if it does make another one
+        code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(10)])
+    return code
