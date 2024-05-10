@@ -51,7 +51,7 @@ client_ids = {}  # alphanumeric id: client_socket
 def main():
     screen_width, screen_height = get_resolution_of_primary_monitor()
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server = ssl.wrap_socket(server, ssl_version=ssl.PROTOCOL_TLSv1_2)
+    # server = ssl.wrap_socket(server, ssl_version=ssl.PROTOCOL_TLSv1_2)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2**30) # Make send buffer 2^30 bytes long
 
     print(f"Server started on IP {SERVER_IP} and port {SERVER_PORT}")

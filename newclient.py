@@ -16,7 +16,7 @@ from header import Header
 
 SCREEN_WIDTH, SCREEN_HEIGHT = get_resolution_of_primary_monitor()
 
-# In the future, don't hardcode the rect on the first screen.
+# todo: don't hardcode the rect on the first screen.
 # use screeninfo to find out the coordinate system and from that make a gui to choose monitors
 def send_continuous_screenshots(sock: socket.socket):
     with mss() as sct:
