@@ -60,7 +60,6 @@ def main():
 
     try:
         while True:
-            TIME = get_hhmmss()  # Returns a time string in the format hh:mm:ss
             rlist, wlist, xlist = select.select([server] + clients,[],[])
             for sock in rlist:
                 if sock is server:  # New connection pending
@@ -69,7 +68,7 @@ def main():
                     clients.append(client)
                     new_code = generate_alphanumeric_code(client_ids)
                     client_ids.update({new_code: client})
-                    print(f"[{TIME}] New Client Connected {addr} | {new_code}")
+                    print(f"[{get_hhmmss()}] New Client Connected {addr} | {new_code}")
                     client.send(new_code.encode('utf-8'))  # Send the client their code
                 else:  # Incoming data from existing client, so handle them
                     handle_client(sock)

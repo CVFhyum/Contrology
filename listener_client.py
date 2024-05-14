@@ -4,10 +4,10 @@ from constants import *
 from configuration import *
 
 
-with socket.socket() as c:
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
     c.connect((SERVER_IP, SERVER_PORT))
     my_code = c.recv(RECIPIENT_HEADER_LENGTH).decode()
-    print(my_code)
+    ic(my_code)
     while True:
         try:
             header = c.recv(HEADER_LENGTH)

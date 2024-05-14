@@ -1,43 +1,52 @@
-# from functions import *
-# from constants import *
-# import tkinter as tk
-# from tkinter import ttk
-# import zlib
+# import argon2
+# import os
 #
-# import base64
-# from io import BytesIO
+# # Function to hash and salt the password
+# def hash_and_salt_password(password):
+#     salt = os.urandom(16).hex()  # Generate a random salt
+#     hasher = argon2.PasswordHasher()
+#     hashed_password = hasher.hash(password + salt)
+#     return hashed_password, salt
 #
+# # Function to verify the entered password
+# def verify_password(stored_hash, stored_salt, entered_password):
+#     hasher = argon2.PasswordHasher()
+#     try:
+#         hasher.verify(stored_hash, entered_password + stored_salt)
+#         return True
+#     except argon2.exceptions.VerifyMismatchError:
+#         return False
 #
-# root = tk.Tk()
-# width, height = 800, 600
-# root.geometry(get_geometry_string(width, height))
-# im = ImageTk.PhotoImage(Image.open("assets/banner.png"))
-# l = ttk.Label(root, image=im)
-# l.grid(row=0,column=0)
+# # Example usage
+# password = "Hello123"
 #
-# root.mainloop()
+# # Hash and salt the password
+# hashed_password, salt = hash_and_salt_password(password)
+#
+# print(type(hashed_password))
+# print()
+# print(salt)
 
-import tkinter as tk
-from tkinter import ttk
-from PIL import Image, ImageTk
+class MyClass:
+    def __init__(self, a, b):
+        self._a = a
+        self.b = b
 
-class ImageDisplayApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Image Display")
-        self.geometry("800x600")
-        self.resizable(False, False)
+    @property
+    def a(self):
+        return self._a
 
-        # Load the image
-        image_path = "assets/banner.png"
-        self.image = Image.open(image_path)
-        self.photo = ImageTk.PhotoImage(self.image)
+    @a.setter
+    def a(self, value):
+        if value is not None and self._a is not None:
+            raise ValueError("Attribute 'a' cannot be changed once it is set.")
+        self._a = value
 
-        # Create a label to display the image
-        self.image_label = ttk.Label(self, image=self.photo)
-        self.image_label.pack(pady=10)
+# Create an object of MyClass
+obj = MyClass(a=None, b=10)
 
-if __name__ == "__main__":
-    app = ImageDisplayApp()
-    app.mainloop()
+# Changing attribute 'a'
+obj.a = 5  # This will raise an error because 'a' is not None
 
+# Output:
+# ValueError: Attribute 'a' cannot be changed once it is set.
