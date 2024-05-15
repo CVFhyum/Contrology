@@ -60,3 +60,11 @@ def generate_alphanumeric_code(existing_client_ids: dict):
     while code in existing_client_ids.keys() or code == SERVER_CODE or code == ALL_CODE:  # Check code doesn't exist, if it does make another one
         code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(10)])
     return code
+
+def get_resized_image(image_path, size):
+    img = Image.open(image_path)
+    if size >= 1:
+        new_width, new_height = size[0], size[1]
+    else:
+        new_width, new_height = int(img.width * size), int(img.height * size)
+    return ImageTk.PhotoImage(img.resize((new_width, new_height)), Image.Resampling.LANCZOS)

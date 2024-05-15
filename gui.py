@@ -10,16 +10,16 @@ from PIL import Image, ImageTk
 import socket
 import threading as thr
 import select
+from typing import Optional
 
 self_code = ""
 incoming_data = ""
 accept_data = True
 
-
 class WindowManager:
     def __init__(self):
-        self._launch_screen_root: tk.Tk = None
-        self._main_screen_root: tk.Tk = None
+        self._launch_screen_root: Optional[tk.Tk] = None
+        self._main_screen_root: Optional[tk.Tk] = None
 
     @property
     def launch_screen_root(self):
@@ -129,7 +129,7 @@ class LaunchScreen(tk.Tk):
         # Complex configuration
         self.geometry(get_geometry_string(self.width, self.height))
         # self.resizable(False, False) # todo: removed for debug
-        self.iconphoto(False, self.logo32)
+        self.iconphoto(True, self.logo32)
         self.protocol("WM_DELETE_WINDOW", on_main_close)
 
         # Widgets
@@ -138,7 +138,6 @@ class LaunchScreen(tk.Tk):
 
         # Functions
         self.dimensions()
-
 
     def dimensions(self):
         self.columnconfigure(0, weight=1)
@@ -158,7 +157,6 @@ class LaunchScreenBannerFrame(tk.Frame):
     def create_widgets(self):
         # Creation
         main_banner = ttk.Label(self,image=self.banner_trans)
-
         # Placement
         main_banner.grid(row=0,column=0)
 
@@ -247,25 +245,90 @@ class MainScreen(tk.Tk):
         self.title("Home - Contrology")
         self.width = 1200
         self.height = 800
-        self.logo32 = ImageTk.PhotoImage(Image.open("assets/Logo32.png"))
 
         # Complex configuration
         self.geometry(get_geometry_string(self.width,self.height))
         # self.resizable(False, False) # todo: removed for debug
-        self.iconphoto(False,self.logo32)
         self.protocol("WM_DELETE_WINDOW",on_main_close)
 
         # Widgets
+        self.top_frame = MainScreenInfoFrame(self)
+        self.middle_frame = MainScreenConnectFrame(self)
+        self.bottom_frame = MainScreenRecentFrame(self)
 
         # Functions
         self.dimensions()
 
     def dimensions(self):
-        pass
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure((0,1,2), weight=1)
 
 # Frames belonging to MainScreen
-class MainScreenFrame(tk.Frame):
-    pass
+class MainScreenInfoFrame(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.grid(row=0, column=0)  # change
+        self.configure(width=parent.width,height=parent.height*0.2)  # change
+        self.configure(highlightthickness=1,highlightbackground='green')  # debug view
+        self.update()
+
+        self.banner_trans = get_resized_image("assets/Banner_Trans.png", 0.36)
+        self.my_code_value_var = tk.StringVar()
+        self.my_code_value_var.set("Asiw93mska")
+
+        self.create_widgets()
+        self.dimensions()
+
+    def create_widgets(self):
+        main_banner = ttk.Label(self, image=self.banner_trans)
+        code_container_frame = tk.Frame(self, highlightthickness=1, highlightbackground='green', height=self.winfo_height(), width=self.winfo_reqwidth()/2)
+        code_container_frame.grid_propagate(False)
+        my_code_info_label = ttk.Label(code_container_frame, text="My Code")
+        my_code_value_label = ttk.Label(code_container_frame, textvariable=self.my_code_value_var)
+        my_code_click_to_copy_label = ttk.Label(code_container_frame, text="(Click to Copy)")
+
+        main_banner.grid(row=0,column=0)
+        code_container_frame.grid(row=0,column=1)
+        my_code_info_label.grid(row=0,column=0)
+        my_code_value_label.grid(row=1,column=0)
+        my_code_click_to_copy_label.grid(row=2,column=0)
+
+    def dimensions(self):
+        self.grid_propagate(False)
+
+class MainScreenConnectFrame(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.grid(row=1, column=0)  # change
+        self.configure(width=parent.width,height=parent.height*0.4)  # change
+        self.configure(highlightthickness=1,highlightbackground='green')  # debug view
+
+        self.create_widgets()
+        self.dimensions()
+
+    def create_widgets(self):
+        pass
+
+    def dimensions(self):
+        self.grid_propagate(False)
+
+
+class MainScreenRecentFrame(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.grid(row=2, column=0)  # change
+        self.configure(width=parent.width,height=parent.height*0.4)  # change
+        self.configure(highlightthickness=1,highlightbackground='green')  # debug view
+
+        self.create_widgets()
+        self.dimensions()
+
+    def create_widgets(self):
+        pass
+
+    def dimensions(self):
+        self.grid_propagate(False)
+
 
 if __name__ == "__main__":
     client_thread = thr.Thread(target=handle_connection)

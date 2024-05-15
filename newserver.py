@@ -44,6 +44,7 @@ def handle_client(sock):
         print(f"Error handling socket: {e}") # todo: remove this
         handle_sock_closing(sock)
 
+
 m_handler = MessageHandler()
 clients = []  # list of all client socket objects
 client_ids = {}  # alphanumeric id: client_socket
