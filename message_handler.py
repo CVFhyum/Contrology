@@ -2,6 +2,7 @@ from typing import Dict
 from constants import *
 from icecream import ic
 
+
 class MessageHandler:
 
     def __init__(self):
@@ -24,17 +25,16 @@ class MessageHandler:
     # Unpack the codes and data from message_queue, receive the id:socket dictionary and dish it all out!
     def send_all(self, client_ids):
         for client_code, data_to_send in list(self.message_queue.items()): # Unpack values from message_queue
-            ic(client_code)
-
             if client_code == ALL_CODE:
                 for client in client_ids.values():
-                    client.sendall(data_to_send)
-                    ic(f"just sent all some data")
+                    try:
+                        client.sendall(data_to_send)
+                    except Exception as e:
+                        print(f"Error sending data to socket: {e}") # todo: remove this and handle the socket closing properly
             elif client_code == SERVER_CODE:
                 raise Exception("Message with recipient as server had a sent attempt - this message was not received properly by the server")
             else:
                 client_ids[client_code].sendall(data_to_send)
-                ic(f"just sent {client_code} some data")
         self.message_queue = {}
 
 
