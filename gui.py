@@ -18,11 +18,13 @@ self_code = ""
 incoming_data_lock = thr.Lock()
 incoming_data = ""
 accept_data = True
+connected = False
 
 def trackvar():
     while True:
         with incoming_data_lock:
-            ic(len(incoming_data))
+            sleep(1)
+            ic(len(incoming_data),client_thread.is_alive())
 
 class WindowManager:
     def __init__(self):
@@ -57,11 +59,14 @@ class WindowManager:
         self.launch_screen_root.mainloop()
 
     def open_main_screen(self):
-        if self.launch_screen_root is not None:
-            self.launch_screen_root.destroy()
-            self.launch_screen_root = None  # Clean-up
-        self.main_screen_root = MainScreen()
-        self.main_screen_root.mainloop()
+        while connected is False:
+            pass
+        if connected:
+            if self.launch_screen_root is not None:
+                self.launch_screen_root.destroy()
+                self.launch_screen_root = None  # Clean-up
+            self.main_screen_root = MainScreen()
+            self.main_screen_root.mainloop()
 
     def close_all(self):
         if wm.launch_screen_root is not None:
@@ -71,9 +76,15 @@ class WindowManager:
 
 
 def handle_connection():
-    global self_code, incoming_data
+    global self_code, incoming_data, connected
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
-        c.connect((SERVER_IP, SERVER_PORT))
+        try:
+            c.connect((SERVER_IP, SERVER_PORT))
+        except ConnectionRefusedError as e:
+            print(f"Couldn't connect to server: {e}")
+            connected = None
+            return
+        connected = True
         self_code = c.recv(RECIPIENT_HEADER_LENGTH).decode()
         ic(self_code)
         c.setblocking(False)
@@ -101,13 +112,13 @@ def handle_connection():
 
         c.close()
 
+
 def on_main_close():
     global accept_data
     wm.close_all()
     accept_data = False
 
 
-# todo: make on_closing function using root.protocol to handle explicit quit gracefully
 # banner = ImageTk.PhotoImage(Image.open("assets/Banner.png"))
 # banner_trans = ImageTk.PhotoImage(Image.open("assets/Banner_Trans.png"))
 # logo = ImageTk.PhotoImage(Image.open("assets/Logo.png"))
