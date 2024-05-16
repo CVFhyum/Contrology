@@ -11,10 +11,18 @@ import socket
 import threading as thr
 import select
 from typing import Optional
+from pyperclip import copy as cc_copy
+from time import sleep
 
 self_code = ""
+incoming_data_lock = thr.Lock()
 incoming_data = ""
 accept_data = True
+
+def trackvar():
+    while True:
+        with incoming_data_lock:
+            ic(len(incoming_data))
 
 class WindowManager:
     def __init__(self):
@@ -78,8 +86,8 @@ def handle_connection():
                         data_length,code = parse_header(header)
                         data = parse_raw_data(recvall(c,data_length))
                         if code == self_code or code == ALL_CODE:
-                            incoming_data = data
-                            ic(len(incoming_data))
+                            with incoming_data_lock:
+                                incoming_data = data
                         else:
                             raise Exception("Intended code didn't match with self code")
                     else:
@@ -273,27 +281,38 @@ class MainScreenInfoFrame(tk.Frame):
         self.update()
 
         self.banner_trans = get_resized_image("assets/Banner_Trans.png", 0.36)
-        self.my_code_value_var = tk.StringVar()
-        self.my_code_value_var.set("Asiw93mska")
+        self.self_code = tk.StringVar()
 
         self.create_widgets()
         self.dimensions()
 
     def create_widgets(self):
+        def show_copied_message():
+            my_code_click_to_copy_label.configure(text="Copied to Clipboard!", foreground='green')
+            sleep(1)
+            my_code_click_to_copy_label.configure(text="(Click to Copy)", foreground='black')
+
         main_banner = ttk.Label(self, image=self.banner_trans)
-        code_container_frame = tk.Frame(self, highlightthickness=1, highlightbackground='green', height=self.winfo_height(), width=self.winfo_reqwidth()/2)
+        code_container_frame = tk.Frame(self, highlightthickness=1, highlightbackground='green', height=self.winfo_height(), width=self.winfo_reqwidth()*0.25)
+        code_container_frame.rowconfigure((0,1,2), weight=1)
+        code_container_frame.columnconfigure(0, weight=1)
         code_container_frame.grid_propagate(False)
-        my_code_info_label = ttk.Label(code_container_frame, text="My Code")
-        my_code_value_label = ttk.Label(code_container_frame, textvariable=self.my_code_value_var)
-        my_code_click_to_copy_label = ttk.Label(code_container_frame, text="(Click to Copy)")
+        my_code_info_label = ttk.Label(code_container_frame, text="My Code", font=consolas(14))
+        my_code_value_label = ttk.Label(code_container_frame, text=self_code, font=consolas(32))
+        my_code_click_to_copy_label = ttk.Label(code_container_frame, text="(Click to Copy)", font=consolas(12))
 
         main_banner.grid(row=0,column=0)
-        code_container_frame.grid(row=0,column=1)
+        code_container_frame.grid(row=0,column=1,sticky='e')
         my_code_info_label.grid(row=0,column=0)
         my_code_value_label.grid(row=1,column=0)
         my_code_click_to_copy_label.grid(row=2,column=0)
 
+        my_code_value_label.bind('<1>', lambda event: [cc_copy(self_code), thr.Thread(target=show_copied_message).start()])
+        my_code_click_to_copy_label.bind('<1>', lambda event: [cc_copy(self_code), thr.Thread(target=show_copied_message).start()])
+
+
     def dimensions(self):
+        self.columnconfigure(1, weight=1)
         self.grid_propagate(False)
 
 class MainScreenConnectFrame(tk.Frame):
@@ -302,15 +321,24 @@ class MainScreenConnectFrame(tk.Frame):
         self.grid(row=1, column=0)  # change
         self.configure(width=parent.width,height=parent.height*0.4)  # change
         self.configure(highlightthickness=1,highlightbackground='green')  # debug view
+        self.connect_code_var = tk.StringVar()
 
         self.create_widgets()
         self.dimensions()
 
     def create_widgets(self):
-        pass
+        connect_label = ttk.Label(self, text="Connect", font=consolas(32))
+        connect_code_entry = ttk.Entry(self, textvariable=self.connect_code_var, font=consolas(32),width=10)
+        connect_button = ttk.Button(self, text="->",style=apply_consolas_to_widget('Button', 32),width=2)
+
+        connect_label.grid(row=0,column=0,sticky='s')
+        connect_code_entry.grid(row=1,column=0,sticky='')
+        connect_button.grid(row=2,column=0,sticky='n')
 
     def dimensions(self):
         self.grid_propagate(False)
+        self.rowconfigure((0,1,2), weight=1)
+        self.columnconfigure(0, weight=1)
 
 
 class MainScreenRecentFrame(tk.Frame):
@@ -332,6 +360,8 @@ class MainScreenRecentFrame(tk.Frame):
 
 if __name__ == "__main__":
     client_thread = thr.Thread(target=handle_connection)
+    track = thr.Thread(target=trackvar, daemon=True)
+    track.start()
     wm = WindowManager()
     wm.open_launch_screen()
 

@@ -56,9 +56,9 @@ def get_hhmmss():
 # Generate a 10 character alphanumeric code for every client that connects to the server
 # This code is used for identifying clients.
 def generate_alphanumeric_code(existing_client_ids: dict):
-    code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(10)])  # Make new code
+    code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(RECIPIENT_HEADER_LENGTH)])  # Make new code
     while code in existing_client_ids.keys() or code == SERVER_CODE or code == ALL_CODE:  # Check code doesn't exist, if it does make another one
-        code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(10)])
+        code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(RECIPIENT_HEADER_LENGTH)])
     return code
 
 def get_resized_image(image_path, size):
