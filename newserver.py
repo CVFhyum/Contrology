@@ -48,6 +48,8 @@ def handle_client(sock):
 m_handler = MessageHandler()
 clients = []  # list of all client socket objects
 client_ids = {}  # alphanumeric id: client_socket
+all_existing_clients_addrs = set()
+
 
 def main():
     screen_width, screen_height = get_resolution_of_primary_monitor()
@@ -71,6 +73,12 @@ def main():
                     client_ids.update({new_code: client})
                     print(f"[{get_hhmmss()}] New Client Connected {addr} | {new_code}")
                     client.send(new_code.encode('utf-8'))  # Send the client their code
+                    if addr in all_existing_clients_addrs:
+                        print("This guy was already here!")
+                    else:
+                        print("This guy is new here!")
+                        ic(addr)
+                        all_existing_clients_addrs.add(addr)
                 else:  # Incoming data from existing client, so handle them
                     handle_client(sock)
             # End

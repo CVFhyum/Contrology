@@ -21,7 +21,7 @@ accept_data = True
 connected = False
 
 def trackvar():
-    while True:
+    while accept_data:
         with incoming_data_lock:
             sleep(1)
             ic(len(incoming_data),client_thread.is_alive())
