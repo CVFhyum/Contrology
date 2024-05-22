@@ -11,7 +11,6 @@ import screeninfo
 from configuration import *
 from functions import *
 from constants import *
-from header import Header
 
 
 SCREEN_WIDTH, SCREEN_HEIGHT = get_resolution_of_primary_monitor()
@@ -24,7 +23,7 @@ def send_continuous_screenshots(sock: socket.socket):
             rect = {'top': 0,'left': 0,'width': SCREEN_WIDTH,'height': SCREEN_HEIGHT}
             new_screenshot = sct.grab(rect)
             ss_bytes = new_screenshot.rgb
-            ready_data = create_sendable_data(ss_bytes, ALL_CODE)
+            ready_data = create_sendable_data(ss_bytes, "IMAGE", ALL_CODE)
             try:
                 sock.sendall(ready_data)
             except Exception as e:

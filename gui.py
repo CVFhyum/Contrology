@@ -94,7 +94,7 @@ def handle_connection():
                 if ready[0]:
                     header = c.recv(HEADER_LENGTH)
                     if header:
-                        data_length,code = parse_header(header)
+                        data_length, data_type, code = parse_header(header)
                         data = parse_raw_data(recvall(c,data_length))
                         if code == self_code or code == ALL_CODE:
                             with incoming_data_lock:

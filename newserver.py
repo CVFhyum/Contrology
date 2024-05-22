@@ -14,7 +14,6 @@ import ssl
 from configuration import *
 from functions import *
 from constants import *
-from header import Header
 from message_handler import MessageHandler
 
 # When a socket raises an error, it should be immediately closed gracefully.
@@ -33,13 +32,13 @@ def handle_sock_closing(sock: socket.socket):
 def handle_client(sock):
     try:
         header = sock.recv(HEADER_LENGTH)  # Receive the header
-        data_length,recipient_code = parse_header(header)  # Parse the header
+        data_length, data_type, code = parse_header(header)  # Parse the header
         data = recvall(sock,data_length)  # Receive all the data
         data = parse_raw_data(data)  # Parse the data
         # TODO: handle messages that are meant for the server
         data = data.encode('utf-8')  # Encode the data
-        data = create_sendable_data(data,recipient_code) # Wrap the data so it's ready to be resent
-        m_handler.update(recipient_code,data)
+        data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent
+        m_handler.update(code, data)
     except Exception as e:
         print(f"Error handling socket: {e}") # todo: remove this
         handle_sock_closing(sock)

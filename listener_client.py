@@ -13,7 +13,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
             header = c.recv(HEADER_LENGTH)
             ic(header)
             if header:  # if header is not empty
-                data_length, code = parse_header(header)
+                data_length, data_type, code = parse_header(header)
                 data = parse_raw_data(recvall(c, data_length))
                 if code == my_code or code == ALL_CODE:
                     if len(data) < 100:

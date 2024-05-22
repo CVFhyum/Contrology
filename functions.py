@@ -32,17 +32,18 @@ def recvall(sock, length) -> bytes:
     return buffer
 
 # Takes care of attaching a header and compressing the data
-def create_sendable_data(data: bytes, recipient_code: str):
+def create_sendable_data(data: bytes, data_type: str, recipient_code: str):
     data = zlib.compress(data, zlib.Z_DEFAULT_COMPRESSION)
-    data_header = Header(len(data), recipient_code)
+    data_header = Header(len(data), data_type, recipient_code)
     return data_header.get_header_bytes() + data
 
 # Given a header, parse it into its components (data length, recipient code) and return them.
-def parse_header(header: bytes) -> tuple:
+def parse_header(header: bytes) -> tuple[int, str, str]:
     header = header.decode('utf-8')
     data_length = int(header[:DATA_HEADER_LENGTH])
-    recipient_code = header[DATA_HEADER_LENGTH:HEADER_LENGTH]
-    return data_length, recipient_code
+    data_type = header[DATA_HEADER_LENGTH:DATA_TYPE_LENGTH].strip()
+    recipient_code = header[DATA_TYPE_LENGTH:HEADER_LENGTH]
+    return data_length, data_type, recipient_code
 
 
 # Takes care of decompressing and decoding the data
