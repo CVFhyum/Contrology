@@ -73,7 +73,7 @@ class WindowManager:
             wm.launch_screen_root.destroy()
         if wm.main_screen_root is not None:
             wm.main_screen_root.destroy()
-
+`
 
 def handle_connection():
     global self_code, incoming_data, connected
@@ -233,6 +233,9 @@ class LaunchScreenButtonsFrame(tk.Frame):
             # todo: handle the entered password (verify it)
             print(self.admin_password_entry_var.get())
 
+        def try_to_conenct():
+
+
 
         # Creation
         launch_app_button = ttk.Button(self,text="Launch App", style=apply_consolas_to_widget("Button", 32), command=lambda: [client_thread.start(), wm.open_main_screen()])
@@ -243,7 +246,7 @@ class LaunchScreenButtonsFrame(tk.Frame):
         launch_app_button.grid(row=0,column=0)
         admin_log_in_button.grid(row=1,column=0)
         admin_password_entry.grid(row=1,column=0)
-        admin_password_entry.grid_remove()  # Remove it at initialization because it should only appear when the entry is pressed
+        admin_password_entry.grid_remove()  # Remove it at initialization because it should only appear when the button is pressed
 
         # Bindings
         admin_password_entry.bind("<FocusIn>",admin_password_entry_focus_in)

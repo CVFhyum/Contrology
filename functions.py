@@ -41,8 +41,13 @@ def create_sendable_data(data: bytes, data_type: str, recipient_code: str):
 def parse_header(header: bytes) -> tuple[int, str, str]:
     header = header.decode('utf-8')
     data_length = int(header[:DATA_HEADER_LENGTH])
-    data_type = header[DATA_HEADER_LENGTH:DATA_TYPE_LENGTH].strip()
-    recipient_code = header[DATA_TYPE_LENGTH:HEADER_LENGTH]
+    header = header[DATA_HEADER_LENGTH:]
+    data_type = header[:DATA_TYPE_LENGTH].strip()
+    header = header[DATA_TYPE_LENGTH:]
+    recipient_code = header[:RECIPIENT_HEADER_LENGTH]
+    header = header[RECIPIENT_HEADER_LENGTH:]
+    if len(header) != 0:
+        raise Exception(f"Not all of header information was parsed")
     return data_length, data_type, recipient_code
 
 
