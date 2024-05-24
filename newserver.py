@@ -15,6 +15,7 @@ from configuration import *
 from functions import *
 from constants import *
 from message_handler import MessageHandler
+from sql_handler import SQLHandler
 
 # When a socket raises an error, it should be immediately closed gracefully.
 # This function removes it from clients, client_ids, and closes it.
@@ -46,6 +47,7 @@ def handle_client(sock):
 
 
 m_handler = MessageHandler()
+db_handler = SQLHandler("contrology.db")
 clients = []  # list of all client socket objects
 client_ids = {}  # alphanumeric id: client_socket
 all_existing_clients_addrs = set()
@@ -66,19 +68,18 @@ def main():
             rlist, wlist, xlist = select.select([server] + clients,[],[])
             for sock in rlist:
                 if sock is server:  # New connection pending
-                    # Accept the connection, add the client, assign a code, log their connection, and send them their code
-                    client, addr = server.accept()
+                    client, addr = server.accept()  # Accept the connection
+                    if db_handler.is_value_in("addresses", "address", addr[0]):  # Check if the address has connected before and has a record in the database
+                        new_code = db_handler.get_code_for_address(addr[0])
+                    else:  # If they are new, give them a new code and add them to the database
+                        new_code = generate_alphanumeric_code(client_ids)
+                        db_handler.insert_address_and_code(addr[0], new_code)
+                    m_handler.update(new_code,create_sendable_data(b"","ACCEPTED", new_code))
+                    client_ids.update({new_code: client})  # Add socket:code to dictionary
+                    all_existing_clients_addrs.add(addr[0])
                     clients.append(client)
-                    new_code = generate_alphanumeric_code(client_ids)
-                    client_ids.update({new_code: client})
                     print(f"[{get_hhmmss()}] New Client Connected {addr} | {new_code}")
-                    client.send(new_code.encode('utf-8'))  # Send the client their code
-                    if addr in all_existing_clients_addrs:
-                        print("This guy was already here!")
-                    else:
-                        print("This guy is new here!")
-                        ic(addr)
-                        all_existing_clients_addrs.add(addr)
+
                 else:  # Incoming data from existing client, so handle them
                     handle_client(sock)
             # End
@@ -89,6 +90,7 @@ def main():
         for client in clients:
             client.close()
         server.close()
+        db_handler.disconnect()
 
 if __name__ == "__main__":
     main()

@@ -73,44 +73,36 @@ class WindowManager:
             wm.launch_screen_root.destroy()
         if wm.main_screen_root is not None:
             wm.main_screen_root.destroy()
-`
 
-def handle_connection():
+
+def handle_connection(c: socket.socket):
     global self_code, incoming_data, connected
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
+    self_code = c.recv(RECIPIENT_HEADER_LENGTH).decode()
+    ic(self_code)
+    c.setblocking(False)
+    while accept_data:
         try:
-            c.connect((SERVER_IP, SERVER_PORT))
-        except ConnectionRefusedError as e:
-            print(f"Couldn't connect to server: {e}")
-            connected = None
-            return
-        connected = True
-        self_code = c.recv(RECIPIENT_HEADER_LENGTH).decode()
-        ic(self_code)
-        c.setblocking(False)
-        while accept_data:
-            try:
-                ready = select.select([c],[],[], 1)
-                if ready[0]:
-                    header = c.recv(HEADER_LENGTH)
-                    if header:
-                        data_length, data_type, code = parse_header(header)
-                        data = parse_raw_data(recvall(c,data_length))
-                        if code == self_code or code == ALL_CODE:
-                            with incoming_data_lock:
-                                incoming_data = data
-                        else:
-                            raise Exception("Intended code didn't match with self code")
+            ready = select.select([c],[],[], 1)
+            if ready[0]:
+                header = c.recv(HEADER_LENGTH)
+                if header:
+                    data_length, data_type, code = parse_header(header)
+                    data = parse_raw_data(recvall(c,data_length))
+                    if code == self_code or code == ALL_CODE:
+                        with incoming_data_lock:
+                            incoming_data = data
                     else:
-                        break
-            except ConnectionResetError as e:
-                print(f"Something went wrong with the connection: {e}")
-            except KeyboardInterrupt:
-                print("Runtime interrupted...")
-                c.close()
-                break
+                        raise Exception("Intended code didn't match with self code")
+                else:
+                    break
+        except ConnectionResetError as e:
+            print(f"Something went wrong with the connection: {e}")
+        except KeyboardInterrupt:
+            print("Runtime interrupted...")
+            c.close()
+            break
 
-        c.close()
+    c.close()
 
 
 def on_main_close():
@@ -233,8 +225,16 @@ class LaunchScreenButtonsFrame(tk.Frame):
             # todo: handle the entered password (verify it)
             print(self.admin_password_entry_var.get())
 
-        def try_to_conenct():
-
+        def try_to_connect():
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                sock.connect((SERVER_IP,SERVER_PORT))
+            except ConnectionRefusedError as e:
+                print(f"Couldn't connect to server: {e}")
+                connected = None
+                return
+            connected = True
+            client_thread.__init__(target=handle_connection, args=(sock,))
 
 
         # Creation

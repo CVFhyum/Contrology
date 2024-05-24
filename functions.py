@@ -37,7 +37,7 @@ def create_sendable_data(data: bytes, data_type: str, recipient_code: str):
     data_header = Header(len(data), data_type, recipient_code)
     return data_header.get_header_bytes() + data
 
-# Given a header, parse it into its components (data length, recipient code) and return them.
+# Given a header, parse it into its components (data length, data type, recipient code) and return them.
 def parse_header(header: bytes) -> tuple[int, str, str]:
     header = header.decode('utf-8')
     data_length = int(header[:DATA_HEADER_LENGTH])
