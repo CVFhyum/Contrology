@@ -77,32 +77,34 @@ class WindowManager:
 
 def handle_connection(c: socket.socket):
     global self_code, incoming_data, connected
-    self_code = c.recv(RECIPIENT_HEADER_LENGTH).decode()
-    ic(self_code)
-    c.setblocking(False)
-    while accept_data:
-        try:
-            ready = select.select([c],[],[], 1)
-            if ready[0]:
-                header = c.recv(HEADER_LENGTH)
-                if header:
-                    data_length, data_type, code = parse_header(header)
-                    data = parse_raw_data(recvall(c,data_length))
-                    if code == self_code or code == ALL_CODE:
-                        with incoming_data_lock:
-                            incoming_data = data
+    data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
+    if data_length > 0:
+        raise Exception("Extra data was sent on initialisation")
+    if connection_status == "ACCEPTED":
+        c.setblocking(False)
+        while accept_data:
+            try:
+                ready = select.select([c],[],[], 1)
+                if ready[0]:
+                    header = c.recv(HEADER_LENGTH)
+                    if header:
+                        data_length, data_type, code = parse_header(header)
+                        data = parse_raw_data(recvall(c,data_length))
+                        if code == self_code or code == ALL_CODE:
+                            with incoming_data_lock:
+                                incoming_data = data
+                        else:
+                            raise Exception("Intended code didn't match with self code")
                     else:
-                        raise Exception("Intended code didn't match with self code")
-                else:
-                    break
-        except ConnectionResetError as e:
-            print(f"Something went wrong with the connection: {e}")
-        except KeyboardInterrupt:
-            print("Runtime interrupted...")
-            c.close()
-            break
+                        break
+            except ConnectionResetError as e:
+                print(f"Something went wrong with the connection: {e}")
+            except KeyboardInterrupt:
+                print("Runtime interrupted...")
+                c.close()
+                break
 
-    c.close()
+        c.close()
 
 
 def on_main_close():

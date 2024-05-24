@@ -33,13 +33,14 @@ def recvall(sock, length) -> bytes:
 
 # Takes care of attaching a header and compressing the data
 def create_sendable_data(data: bytes, data_type: str, recipient_code: str):
-    data = zlib.compress(data, zlib.Z_DEFAULT_COMPRESSION)
+    if len(data) != 0:
+        data = zlib.compress(data, zlib.Z_DEFAULT_COMPRESSION)
     data_header = Header(len(data), data_type, recipient_code)
     return data_header.get_header_bytes() + data
 
 # Given a header, parse it into its components (data length, data type, recipient code) and return them.
 def parse_header(header: bytes) -> tuple[int, str, str]:
-    header = header.decode('utf-8')
+    header = header.decode('utf-8', 'ignore')
     data_length = int(header[:DATA_HEADER_LENGTH])
     header = header[DATA_HEADER_LENGTH:]
     data_type = header[:DATA_TYPE_LENGTH].strip()
@@ -53,7 +54,9 @@ def parse_header(header: bytes) -> tuple[int, str, str]:
 
 # Takes care of decompressing and decoding the data
 def parse_raw_data(data: bytes) -> str:
-    return zlib.decompress(data).decode('utf-8', 'ignore')
+    if len(data) != 0:
+        data = zlib.decompress(data)
+    return data.decode('utf-8', 'ignore')
 
 # Get the time in the form of HH:MM:SS (Example: 14:37:06)
 def get_hhmmss():

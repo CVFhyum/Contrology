@@ -36,7 +36,8 @@ def handle_client(sock):
         data_length, data_type, code = parse_header(header)  # Parse the header
         data = recvall(sock,data_length)  # Receive all the data
         data = parse_raw_data(data)  # Parse the data
-        ic(len(data), data_length, data_type, code)
+        ic(len(data), data_length)
+        ic(data_type, code)
         # TODO: handle messages that are meant for the server
         data = data.encode('utf-8')  # Encode the data
         data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent

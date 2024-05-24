@@ -33,10 +33,16 @@ def send_continuous_screenshots(sock: socket.socket):
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
     client.connect((SERVER_IP, SERVER_PORT))
-    self_code = client.recv(RECIPIENT_HEADER_LENGTH).decode()
-    print(self_code)
-    thread = thr.Thread(target=send_continuous_screenshots,args=(client,))
-    thread.start()
-    while thread.is_alive(): # todo: issue later on, this is so the client will stop if the thread stops
-        pass
+    data_length, connection_status, self_code = parse_header(client.recv(HEADER_LENGTH))
+    if data_length > 0:
+        raise Exception(f"Extra data was sent on initialisation")
+    if connection_status == "ACCEPTED":
+        ic(self_code)
+        thread = thr.Thread(target=send_continuous_screenshots,args=(client,))
+        thread.start()
+        while thread.is_alive(): # todo: issue later on, this is so the client will stop if the thread stops
+            try:
+                pass
+            except KeyboardInterrupt:
+                print("Client interrupted....")
 
