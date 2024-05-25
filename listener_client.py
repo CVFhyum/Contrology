@@ -24,7 +24,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
                         else:
                             print(len(data), data_length)
                     else:
-                        raise Exception("Intended code didn't match with self code")
+                        raise Exception(f"Intended code {code} didn't match with self code {self_code} or ALL_CODE {ALL_CODE}")
                 else: # header is empty
                     break
             except ConnectionResetError as e:

@@ -52,6 +52,8 @@ class SQLHandler:
             return cursor.lastrowid
         return None
 
+    # Custom Functions
+
     def create_address_table(self):
         query = """
         CREATE TABLE IF NOT EXISTS addresses (
@@ -61,11 +63,13 @@ class SQLHandler:
         """
         self.execute_query(query)
 
-    def is_value_in(self, table_name, column_name, value):
+    # Checks if a value is in a specific column in a specific table, returns True or False
+    def is_value_in(self, table_name, column_name, value) -> bool:
         query = f"SELECT 1 FROM {table_name} WHERE {column_name} = ?"
         exists = bool(self.fetchone(query, (value,)))
         return exists
 
+    # With a given address, get the code
     def get_code_for_address(self, address):
         query = "SELECT code FROM addresses WHERE address = ?"
         row = self.fetchone(query, (address,))

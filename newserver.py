@@ -46,12 +46,12 @@ def handle_client(sock):
         print(f"Error handling socket: {e}") # todo: remove this
         handle_sock_closing(sock)
 
-
+# Create handlers
 m_handler = MessageHandler()
 db_handler = SQLHandler("contrology.db")
+
 clients = []  # list of all client socket objects
 client_ids = {}  # alphanumeric id: client_socket
-all_existing_clients_addrs = set()
 
 
 def main():
@@ -77,7 +77,6 @@ def main():
                         db_handler.insert_address_and_code(addr[0], new_code)
                     m_handler.update(new_code,create_sendable_data(b"","ACCEPTED", new_code))
                     client_ids.update({new_code: client})  # Add socket:code to dictionary
-                    all_existing_clients_addrs.add(addr[0])
                     clients.append(client)
                     print(f"[{get_hhmmss()}] New Client Connected {addr} | {new_code}")
 
