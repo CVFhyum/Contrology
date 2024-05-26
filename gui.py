@@ -3,6 +3,7 @@ import base64
 from functions import *
 from constants import *
 from configuration import *
+from data_handler import DataHandler
 
 import tkinter as tk
 from tkinter import ttk
@@ -16,16 +17,16 @@ from time import sleep
 
 # Global variables that can be accessed all throughout the code
 self_code = ""  # This client's code
-incoming_data = ""  # Incoming data by the server is stored in this string
-incoming_data_lock = thr.Lock()  # Lock to prevent race conditions on incoming_data
+data_handler_lock = thr.Lock()  # Lock to prevent race conditions on the DataHandler obj
 accept_data = True  # Flag that is disabled when the client is interrupted or quits. This will make sure that necessary information-receiving threads are stopped.
 connected = False  # Flag that documents if the client is currently connected to the socket.
 
 def trackvar():
     while accept_data:
-        with incoming_data_lock:
-            sleep(1)
-            ic(len(incoming_data),client_thread.is_alive())
+        sleep(1)
+        length = len(d_handler.incoming_data_queue)
+        with data_handler_lock:
+            ic(client_thread.is_alive(), length)
 
 # Implementation of the WindowManager class.
 # This class has one object during runtime and manages the current window that is open.
@@ -65,7 +66,6 @@ class WindowManager:
         self.launch_screen_root.mainloop()
 
     def open_main_screen(self):
-        ic(connected)
         if self.launch_screen_root is not None:
             self.launch_screen_root.destroy()
             self.launch_screen_root = None  # Clean-up
@@ -73,18 +73,17 @@ class WindowManager:
         self.main_screen_root.mainloop()
 
     def close_all(self):
-        if wm.launch_screen_root is not None:
-            wm.launch_screen_root.destroy()
-        if wm.main_screen_root is not None:
-            wm.main_screen_root.destroy()
+        if self.launch_screen_root is not None:
+            self.launch_screen_root.destroy()
+        if self.main_screen_root is not None:
+            self.main_screen_root.destroy()
 
 
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
 # This thread takes care of receiving incoming data from the server and loading it into incoming_data
-# TODO: rethink loading incoming data into 1 variable
 def handle_connection(c: socket.socket):
     ic()
-    global self_code, incoming_data, connected
+    global self_code, connected
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
     # If the initialisation header that was sent by the server has extra data, raise this error
     if data_length > 0:
@@ -101,13 +100,15 @@ def handle_connection(c: socket.socket):
                     if header:
                         data_length, data_type, code = parse_header(header)
                         data = parse_raw_data(recvall(c,data_length))
+                        ic(len(data))
                         if code == self_code or code == ALL_CODE:
-                            with incoming_data_lock:
-                                incoming_data = data
+                            with data_handler_lock:
+                                d_handler.insert_new_incoming_message((data_type, data))
                         else:
                             raise Exception(f"Intended code {code} didn't match with self code {self_code} or ALL_CODE {ALL_CODE}")
                     else:
                         break
+                d_handler.send_all_outgoing_data(c)
             except ConnectionResetError as e:
                 print(f"Something went wrong with the connection: {e}")
                 connected = False
@@ -133,7 +134,7 @@ def on_main_close():
 
 
 # Generates a tkinter-formatted consolas font at a desired size. Made for code readability.
-def consolas(size):
+def consolas(size: int):
     return "Consolas", size
 
 # https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/ttk-style-layer.html
@@ -252,6 +253,9 @@ class LaunchScreenButtonsFrame(tk.Frame):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
                 sock.connect((SERVER_IP,SERVER_PORT))
+                self.feedback_label_var.set("Connected!")
+                feedback_label.config(foreground='green')
+                self.update()
             except ConnectionRefusedError as e:
                 print(f"Couldn't connect to server: {e}")
                 self.feedback_label_var.set("Couldn't connect to server.")
@@ -404,6 +408,7 @@ if __name__ == "__main__":
     client_thread = thr.Thread()
     track = thr.Thread(target=trackvar, daemon=True)
     track.start()
+    d_handler = DataHandler()
     wm = WindowManager()
     wm.open_launch_screen()
 

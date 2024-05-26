@@ -19,18 +19,18 @@ from sql_handler import SQLHandler
 
 # When a socket raises an error, it should be immediately closed gracefully.
 # This function removes it from clients, client_ids, and closes it.
-def handle_sock_closing(sock: socket.socket):
-    clients.remove(sock)
-    for code, socket in client_ids.items():
-        if socket is sock:
-            print(f"[{get_hhmmss()}] Client Disconnected {sock.getsockname()} | {code}")
+def handle_sock_closing(closing_sock: socket.socket):
+    clients.remove(closing_sock)
+    for code, sock in client_ids.items():
+        if sock is closing_sock:
+            print(f"[{get_hhmmss()}] Client Disconnected {closing_sock.getsockname()} | {code}")
             del client_ids[code]
             break
-    sock.close()
+    closing_sock.close()
 
 # When the server detects data incoming from an existing socket, this function is called.
 # This function listens out for headers, and uses those to listen to data that is later resent.
-def handle_client(sock):
+def handle_client(sock: socket.socket):
     try:
         header = sock.recv(HEADER_LENGTH)  # Receive the header
         data_length, data_type, code = parse_header(header)  # Parse the header
@@ -50,8 +50,8 @@ def handle_client(sock):
 m_handler = MessageHandler()
 db_handler = SQLHandler("contrology.db")
 
-clients = []  # list of all client socket objects
-client_ids = {}  # alphanumeric id: client_socket
+clients = []  # List of all client socket objects
+client_ids = {}  # alphanumeric id: client socket
 
 
 def main():
@@ -79,6 +79,7 @@ def main():
                     client_ids.update({new_code: client})  # Add socket:code to dictionary
                     clients.append(client)
                     print(f"[{get_hhmmss()}] New Client Connected {addr} | {new_code}")
+
 
                 else:  # Incoming data from existing client, so handle them
                     handle_client(sock)

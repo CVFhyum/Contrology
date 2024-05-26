@@ -1,6 +1,7 @@
 from typing import Dict
-from constants import *
+from constants import ALL_CODE, SERVER_CODE
 from icecream import ic
+import socket
 
 
 class MessageHandler:
@@ -11,7 +12,7 @@ class MessageHandler:
         self.message_queue: Dict[str, bytes] = {}
 
     # Update the dictionary with a new code:data pair to send at the end of the server loop.
-    def update(self, client_code: str, ready_data_to_send: bytes):
+    def update(self, client_code: str, ready_data_to_send: bytes) -> None:
         if len(client_code) != 10: raise Exception(f"Client code {client_code} passed to MessageHandler is not 10 characters long")
         if not isinstance(ready_data_to_send, bytes): raise Exception("Data passed to MessageHandler is not bytes")
         # Check if the arg is a string
@@ -23,7 +24,7 @@ class MessageHandler:
                 self.message_queue.update({code: ready_data_to_send})
 
     # Unpack the codes and data from message_queue, receive the id:socket dictionary and dish it all out!
-    def send_all(self, client_ids):
+    def send_all(self, client_ids: Dict[str, socket.socket]) -> None:
         for client_code, data_to_send in list(self.message_queue.items()): # Unpack values from message_queue
             if client_code == ALL_CODE:
                 for client in client_ids.values():

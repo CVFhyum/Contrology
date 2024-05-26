@@ -1,7 +1,12 @@
 import sqlite3
 
+# TODO: make the addresses table more, and change sql handler functions accordingly
+# TODO: change the addresses table to users table, and have the following fields:
+# TODO: id (pk, ai, u), hostname, address, code
+# ic(get_bare_hostname(addr[0]))
+
 class SQLHandler:
-    def __init__(self, db_name):
+    def __init__(self, db_name: str):
         self.db_name = db_name
         self.connection = None
         self.create_address_table()
@@ -17,7 +22,7 @@ class SQLHandler:
             self.connection = None
             print(f"Disconnected from {self.db_name}")
 
-    def execute_query(self, query, params=None):
+    def execute_query(self, query: str, params=None):
         if not self.connection:
             self.connect()
 
@@ -34,19 +39,19 @@ class SQLHandler:
             self.connection.rollback()
             return None
 
-    def fetchall(self, query, params=None):
+    def fetchall(self, query: str, params=None):
         cursor = self.execute_query(query, params)
         if cursor:
             return cursor.fetchall()
         return []
 
-    def fetchone(self, query, params=None):
+    def fetchone(self, query: str, params=None):
         cursor = self.execute_query(query, params)
         if cursor:
             return cursor.fetchone()
         return None
 
-    def insert(self, query, params):
+    def insert(self, query: str, params: tuple):
         cursor = self.execute_query(query, params)
         if cursor:
             return cursor.lastrowid
@@ -64,13 +69,13 @@ class SQLHandler:
         self.execute_query(query)
 
     # Checks if a value is in a specific column in a specific table, returns True or False
-    def is_value_in(self, table_name, column_name, value) -> bool:
+    def is_value_in(self, table_name: str, column_name: str, value: str) -> bool:
         query = f"SELECT 1 FROM {table_name} WHERE {column_name} = ?"
         exists = bool(self.fetchone(query, (value,)))
         return exists
 
     # With a given address, get the code
-    def get_code_for_address(self, address):
+    def get_code_for_address(self, address: str):
         query = "SELECT code FROM addresses WHERE address = ?"
         row = self.fetchone(query, (address,))
         if row:
@@ -78,7 +83,7 @@ class SQLHandler:
         else:
             return None
 
-    def insert_address_and_code(self, address, code):
+    def insert_address_and_code(self, address: str, code: str):
         query = "INSERT INTO addresses (address, code) VALUES (?, ?)"
         self.insert(query, (address,code))
 

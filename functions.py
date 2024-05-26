@@ -6,15 +6,17 @@ from datetime import datetime
 from icecream import ic
 import random as r
 from PIL import Image, ImageTk
+import socket
+from typing import Dict
 
 # With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
-def get_geometry_string(window_width, window_height):
+def get_geometry_string(window_width: int, window_height: int) -> str:
     screen_width, screen_height = get_resolution_of_primary_monitor()
     x_offset, y_offset = int((screen_width-window_width)/2), int((screen_height-window_height)/2)
     return f"{window_width}x{window_height}+{x_offset}+{y_offset}"
 
 # Get resolution of monitor that is marked as primary by the OS.
-def get_resolution_of_primary_monitor():
+def get_resolution_of_primary_monitor() -> tuple[int,int]:
     for m in screeninfo.get_monitors():
         if m.is_primary:
             return m.width,m.height
@@ -22,7 +24,7 @@ def get_resolution_of_primary_monitor():
 # Given a socket and a constant length, receive exactly length bytes from that socket and return them.
 # Used always, recv() is only used for receiving initial headers.
 # The point is to make sure no data gets lost because of data being bigger than the maximum recv() limit.
-def recvall(sock, length) -> bytes:
+def recvall(sock: socket.socket, length: int) -> bytes:
     buffer = b''
     while len(buffer) < length: # Since we keep adding to buffer, we will continue if it hasn't surpassed the desired length
         data = sock.recv(length - len(buffer))
@@ -32,7 +34,7 @@ def recvall(sock, length) -> bytes:
     return buffer
 
 # Takes care of attaching a header and compressing the data
-def create_sendable_data(data: bytes, data_type: str, recipient_code: str):
+def create_sendable_data(data: bytes, data_type: str, recipient_code: str) -> bytes:
     if len(data) != 0:
         data = zlib.compress(data, zlib.Z_DEFAULT_COMPRESSION)
     data_header = Header(len(data), data_type, recipient_code)
@@ -64,16 +66,31 @@ def get_hhmmss():
 
 # Generate a 10 character alphanumeric code for every client that connects to the server
 # This code is used for identifying clients.
-def generate_alphanumeric_code(existing_client_ids: dict):
+def generate_alphanumeric_code(existing_client_ids: Dict[str, socket.socket]) -> str:
     code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(RECIPIENT_HEADER_LENGTH)])  # Make new code
+    # TODO: make the pool of used codes come from sql, not the temporary client ids
     while code in existing_client_ids.keys() or code == SERVER_CODE or code == ALL_CODE:  # Check code doesn't exist, if it does make another one
         code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(RECIPIENT_HEADER_LENGTH)])
     return code
 
-def get_resized_image(image_path, size):
+def get_resized_image(image_path: str, size: tuple[int, int]) -> ImageTk.PhotoImage:
     img = Image.open(image_path)
     if size >= 1:
         new_width, new_height = size[0], size[1]
     else:
         new_width, new_height = int(img.width * size), int(img.height * size)
     return ImageTk.PhotoImage(img.resize((new_width, new_height)), Image.Resampling.LANCZOS)
+
+# Performs a reverse DNS lookup to get the hostname of a socket. Truncates the hostname by removing DNS suffixes.
+def get_bare_hostname(ip_addr: str) -> str:
+    try:
+        # Perform a reverse DNS lookup to get the hostname
+        hostname = socket.gethostbyaddr(ip_addr)[0]
+        # Split the hostname by '.' and take the first part (bare hostname)
+        bare_hostname = hostname.split('.')[0]
+        return bare_hostname
+    except socket.herror as e:
+        # Handle the case where the hostname could not be resolved
+        print(f"Error resolving hostname: {e}")
+        return None
+
