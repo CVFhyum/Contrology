@@ -1,4 +1,4 @@
-## How do you send data?
+# How do you send data?
 Use **create_sendable_data()** and pass the following arguments:
 - Data in the form of bytes, with no header
 - The data type (see below)
@@ -6,7 +6,7 @@ Use **create_sendable_data()** and pass the following arguments:
 
 You will get ready bytes to send.
 
-## How do you receive data?
+# How do you receive data?
 Wait for a header of length **HEADER_LENGTH**\
 Parse the header bytes by using **parse_header()**, this will return a tuple: (data_length, data_type, recipient_code)\
 Use **recvall()** and pass the following arguments:
@@ -16,8 +16,16 @@ Use **recvall()** and pass the following arguments:
 You will get compressed data in bytes.\
 Pass this data into **parse_raw_data()** and you will get a string of data.
 
-## List of data types that can be sent:
-* **ACCEPTED** - Sent by the server to notify a client that a connection can be and has been established
-* **REJECTED** - Sent by the server to notify a client that a connection can not be and has not been established
+# List of data types that can be sent:
+### On initial connection to server
+* **INITIAL_ACCEPT** - Sent by the server to notify a client that a connection can be and has been established
+* **INITIAL_REJECT** - Sent by the server to notify a client that a connection can not be and has not been established
 * **CODE** - Sent by the server to indicate the client's code to them (at the start of the program)
+### Protocol for a client (controller) asking permission of a client (remote)
+* **CONNECT_REQUEST** - Sent by a controller that is requesting to take control of a remote. The code of the remote is in the header.
+* **CONNECT_REQUEST** - Sent by the server to the remote to request control. The data contains the controller's hostname for display purposes.
+* **CONNECT_ACCEPT** - Sent by the remote to signify a positive response. The code of the controller is in the header.
+* **CONNECT_ACCEPT** - Sent by the server to the controller to signify that controlling permission has been granted.
+* **CONNECT_DENY** - Sent by the remote to signify a negative response. The code of the controller is in the header.
+* **CONNECT_DENY** - Sent by the server to the controller to signify that controlling permission has been denied
 * **IMAGE** - Sent by a client that is sending image bytes that should be decoded and displayed

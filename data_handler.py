@@ -10,10 +10,12 @@ class DataHandler:
         self.incoming_data_queue: list = []
         self.outgoing_data_queue: list = []
 
-    def insert_new_incoming_message(self, data):
+    # Insert data as a tuple (data type, data)
+    def insert_new_incoming_message(self, data: tuple[str, str]):
         self.incoming_data_queue.append(data)
 
-    def insert_new_outgoing_message(self, data):
+    # Insert data as "ready data" (with a header)
+    def insert_new_outgoing_message(self, data: bytes):
         self.outgoing_data_queue.append(data)
 
     def get_most_recent_message(self):

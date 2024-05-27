@@ -373,6 +373,9 @@ class MainScreenConnectFrame(tk.Frame):
         self.dimensions()
 
     def create_widgets(self):
+        def send_connection_request():
+            d_handler.insert_new_outgoing_message(create_sendable_data(b"", "CONNECT_REQUEST", self.connect_code_var.get()))
+
         connect_label = ttk.Label(self, text="Connect", font=consolas(32))
         connect_code_entry = ttk.Entry(self, textvariable=self.connect_code_var, font=consolas(32),width=10)
         connect_button = ttk.Button(self, text="->",style=apply_consolas_to_widget('Button', 32),width=2)

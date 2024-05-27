@@ -75,11 +75,10 @@ def main():
                     else:  # If they are new, give them a new code and add them to the database
                         new_code = generate_alphanumeric_code(client_ids)
                         db_handler.insert_address_and_code(addr[0], new_code)
-                    m_handler.update(new_code,create_sendable_data(b"","ACCEPTED", new_code))
+                    m_handler.update(new_code,create_sendable_data(b"","INITIAL_ACCEPT", new_code))
                     client_ids.update({new_code: client})  # Add socket:code to dictionary
                     clients.append(client)
                     print(f"[{get_hhmmss()}] New Client Connected {addr} | {new_code}")
-
 
                 else:  # Incoming data from existing client, so handle them
                     handle_client(sock)

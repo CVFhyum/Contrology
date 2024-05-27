@@ -1,5 +1,5 @@
 from typing import Dict
-from constants import ALL_CODE, SERVER_CODE
+from constants import ALL_CODE, SERVER_CODE, RECIPIENT_HEADER_LENGTH
 from icecream import ic
 import socket
 
@@ -13,8 +13,10 @@ class MessageHandler:
 
     # Update the dictionary with a new code:data pair to send at the end of the server loop.
     def update(self, client_code: str, ready_data_to_send: bytes) -> None:
-        if len(client_code) != 10: raise Exception(f"Client code {client_code} passed to MessageHandler is not 10 characters long")
-        if not isinstance(ready_data_to_send, bytes): raise Exception("Data passed to MessageHandler is not bytes")
+        if len(client_code) != RECIPIENT_HEADER_LENGTH:
+            raise Exception(f"Client code {client_code} passed to MessageHandler is not 10 characters long")
+        if not isinstance(ready_data_to_send, bytes):
+            raise Exception("Data passed to MessageHandler is not bytes")
         # Check if the arg is a string
         if isinstance(client_code, str):
             self.message_queue.update({client_code: ready_data_to_send})
