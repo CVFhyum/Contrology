@@ -88,7 +88,7 @@ def handle_connection(c: socket.socket):
     # If the initialisation header that was sent by the server has extra data, raise this error
     if data_length > 0:
         raise Exception("Extra data was sent on initialisation")
-    if connection_status == "ACCEPTED":
+    if connection_status == "INITIAL_ACCEPT":
         c.setblocking(False)
         while accept_data:
             try:
@@ -108,7 +108,9 @@ def handle_connection(c: socket.socket):
                             raise Exception(f"Intended code {code} didn't match with self code {self_code} or ALL_CODE {ALL_CODE}")
                     else:
                         break
+                ic()
                 d_handler.send_all_outgoing_data(c)
+                ic()
             except ConnectionResetError as e:
                 print(f"Something went wrong with the connection: {e}")
                 connected = False
@@ -374,11 +376,13 @@ class MainScreenConnectFrame(tk.Frame):
 
     def create_widgets(self):
         def send_connection_request():
+            ic()
             d_handler.insert_new_outgoing_message(create_sendable_data(b"", "CONNECT_REQUEST", self.connect_code_var.get()))
+            ic()
 
         connect_label = ttk.Label(self, text="Connect", font=consolas(32))
         connect_code_entry = ttk.Entry(self, textvariable=self.connect_code_var, font=consolas(32),width=10)
-        connect_button = ttk.Button(self, text="->",style=apply_consolas_to_widget('Button', 32),width=2)
+        connect_button = ttk.Button(self, text="->",style=apply_consolas_to_widget('Button', 32),width=2,command=send_connection_request)
 
         connect_label.grid(row=0,column=0,sticky='s')
         connect_code_entry.grid(row=1,column=0,sticky='')

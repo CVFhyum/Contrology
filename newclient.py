@@ -36,7 +36,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
     data_length, connection_status, self_code = parse_header(client.recv(HEADER_LENGTH))
     if data_length > 0:
         raise Exception(f"Extra data was sent on initialisation")
-    if connection_status == "ACCEPTED":
+    if connection_status == "INITIAL_ACCEPT":
         ic(self_code)
         thread = thr.Thread(target=send_continuous_screenshots,args=(client,))
         thread.start()
