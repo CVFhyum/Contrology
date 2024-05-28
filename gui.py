@@ -107,7 +107,10 @@ def handle_general_connection(c: socket.socket):
                             with data_handler_lock:
                                 match data_type:
                                     case "CONNECT_REQUEST":
-                                        d_handler.insert_new_incoming_message((data_type, data)) # TODO: change this if decide to use connec requests attr
+                                        requester_code, requester_hostname = data[:RECIPIENT_HEADER_LENGTH], data[RECIPIENT_HEADER_LENGTH:]
+                                        # TODO: instantly accepting if a request is sent currently, handle that here.
+                                        d_handler.insert_new_outgoing_message((create_sendable_data(b"", "CONNECT_ACCEPT", requester_code)))
+                                        # d_handler.insert_new_incoming_message((data_type, data)) # TODO: change this if decide to use connec requests attr
                                     case "CONNECT_ACCEPT":
                                         wait_for_connection_response.set()
                                     case _:
@@ -116,7 +119,6 @@ def handle_general_connection(c: socket.socket):
                             raise Exception(f"Intended code {code} didn't match with self code {self_code} or ALL_CODE {ALL_CODE}")
                     else:
                         break
-
                 d_handler.send_all_outgoing_data(c)
             except ConnectionResetError as e:
                 print(f"Something went wrong with the connection: {e}")
@@ -276,7 +278,7 @@ class LaunchScreenButtonsFrame(tk.Frame):
                 self.feedback_label_var.set("Connected!")
                 feedback_label.config(foreground='green')
                 self.update()
-            except ConnectionRefusedError as e:
+            except (ConnectionRefusedError, ConnectionResetError, ConnectionError, ConnectionAbortedError, OSError) as e:
                 print(f"Couldn't connect to server: {e}")
                 self.feedback_label_var.set("Couldn't connect to server.")
                 feedback_label.config(foreground='red')
@@ -407,7 +409,7 @@ class MainScreenConnectFrame(tk.Frame):
         self.columnconfigure(0, weight=1)
 
     def set_up_connection_thread(self):
-        connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get()))
+        connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get(),))
         connection_thread.start()
 
 

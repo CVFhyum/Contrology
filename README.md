@@ -23,8 +23,8 @@ Pass this data into **parse_raw_data()** and you will get a string of data.
 * **CODE** - Sent by the server to indicate the client's code to them (at the start of the program)
 ### Protocol for a client (controller) asking permission of a client (remote)
 * **CONNECT_REQUEST** - Sent by a controller that is requesting to take control of a remote. The code of the remote is in the header.
-* **CONNECT_REQUEST** - Sent by the server to the remote to request control. The data contains the controller's hostname for display purposes.
-* **CONNECT_NOT_FOUND** - Sent by the server to the controller if the remote requested was not found.
+* **CONNECT_REQUEST** - Sent by the server to the remote to request control. The data contains the controller's code concatenated to their hostname *CODE+HOSTNAME* for display purposes.
+* **CODE_NOT_FOUND** - Sent by the server to the controller if the remote requested was not found.
 * **CONNECT_ACCEPT** - Sent by the remote to signify a positive response. The code of the controller is in the header.
 * **CONNECT_ACCEPT** - Sent by the server to the controller to signify that controlling permission has been granted.
 * **CONNECT_DENY** - Sent by the remote to signify a negative response. The code of the controller is in the header.
