@@ -20,13 +20,16 @@ self_code = ""  # This client's code
 data_handler_lock = thr.Lock()  # Lock to prevent race conditions on the DataHandler obj
 accept_data = True  # Flag that is disabled when the client is interrupted or quits. This will make sure that necessary information-receiving threads are stopped.
 connected = False  # Flag that documents if the client is currently connected to the socket.
+wait_for_connection_response = thr.Event()
 
 def trackvar():
     while accept_data:
         sleep(1)
-        length = len(d_handler.incoming_data_queue)
         with data_handler_lock:
-            ic(client_thread.is_alive(), length)
+            length = len(d_handler.incoming_data_queue)
+            ic(d_handler.incoming_data_queue)
+        ic(client_thread.is_alive(), length)
+
 
 # Implementation of the WindowManager class.
 # This class has one object during runtime and manages the current window that is open.
@@ -81,10 +84,10 @@ class WindowManager:
 
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
 # This thread takes care of receiving incoming data from the server and loading it into incoming_data
-def handle_connection(c: socket.socket):
-    ic()
-    global self_code, connected
+def handle_general_connection(c: socket.socket):
+    global self_code, connected, accept_data
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
+    ic(self_code)
     # If the initialisation header that was sent by the server has extra data, raise this error
     if data_length > 0:
         raise Exception("Extra data was sent on initialisation")
@@ -93,34 +96,49 @@ def handle_connection(c: socket.socket):
         while accept_data:
             try:
                 # This thread should not block, so data is read asynchronously
-                ready = select.select([c],[],[], 1)
+                ready = select.select([c],[],[], 0.1)
                 if ready[0]:
                     # Receiving data protocol: listen for header, parse it, listen for all of data
                     header = c.recv(HEADER_LENGTH)
                     if header:
                         data_length, data_type, code = parse_header(header)
                         data = parse_raw_data(recvall(c,data_length))
-                        ic(len(data))
                         if code == self_code or code == ALL_CODE:
                             with data_handler_lock:
-                                d_handler.insert_new_incoming_message((data_type, data))
+                                match data_type:
+                                    case "CONNECT_REQUEST":
+                                        d_handler.insert_new_incoming_message((data_type, data)) # TODO: change this if decide to use connec requests attr
+                                    case "CONNECT_ACCEPT":
+                                        wait_for_connection_response.set()
+                                    case _:
+                                        d_handler.insert_new_incoming_message((data_type, data))
                         else:
                             raise Exception(f"Intended code {code} didn't match with self code {self_code} or ALL_CODE {ALL_CODE}")
                     else:
                         break
-                ic()
+
                 d_handler.send_all_outgoing_data(c)
-                ic()
             except ConnectionResetError as e:
                 print(f"Something went wrong with the connection: {e}")
                 connected = False
+                accept_data = False
             except KeyboardInterrupt:
                 print("Runtime interrupted...")
                 connected = False
+                accept_data = False
                 c.close()
                 break
 
         c.close()
+
+def handle_controlling_connection(connect_code):
+    if connect_code == self_code:
+        raise Exception("Self code was given") # TODO: make this part of the code not raise an error, but change a label in tkinter
+    with data_handler_lock:
+        d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_REQUEST",connect_code))
+    wait_for_connection_response.wait()
+    wait_for_connection_response.clear()
+    print("Permission granted!")
 
 
 def on_main_close():
@@ -265,7 +283,7 @@ class LaunchScreenButtonsFrame(tk.Frame):
                 connected = None
                 return
             connected = True
-            client_thread = thr.Thread(target=handle_connection, args=(sock,))
+            client_thread = thr.Thread(target=handle_general_connection,args=(sock,))
             client_thread.start()
             wm.open_main_screen()
 
@@ -375,14 +393,9 @@ class MainScreenConnectFrame(tk.Frame):
         self.dimensions()
 
     def create_widgets(self):
-        def send_connection_request():
-            ic()
-            d_handler.insert_new_outgoing_message(create_sendable_data(b"", "CONNECT_REQUEST", self.connect_code_var.get()))
-            ic()
-
-        connect_label = ttk.Label(self, text="Connect", font=consolas(32))
+        connect_label = ttk.Label(self, text="Connect to a remote machine", font=consolas(32))
         connect_code_entry = ttk.Entry(self, textvariable=self.connect_code_var, font=consolas(32),width=10)
-        connect_button = ttk.Button(self, text="->",style=apply_consolas_to_widget('Button', 32),width=2,command=send_connection_request)
+        connect_button = ttk.Button(self, text="->",style=apply_consolas_to_widget('Button', 32),width=2,command=self.set_up_connection_thread)
 
         connect_label.grid(row=0,column=0,sticky='s')
         connect_code_entry.grid(row=1,column=0,sticky='')
@@ -392,6 +405,12 @@ class MainScreenConnectFrame(tk.Frame):
         self.grid_propagate(False)
         self.rowconfigure((0,1,2), weight=1)
         self.columnconfigure(0, weight=1)
+
+    def set_up_connection_thread(self):
+        connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get()))
+        connection_thread.start()
+
+
 
 
 class MainScreenRecentFrame(tk.Frame):

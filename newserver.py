@@ -39,8 +39,17 @@ def handle_client(sock: socket.socket):
         ic(len(data), data_length)
         ic(data_type, code)
         # TODO: handle messages that are meant for the server
-        data = data.encode('utf-8')  # Encode the data
-        data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent
+
+        # TODO: rethink way of handling request packets and sending a not_found packet back.
+        # TODO: maybe make message handler read the code from the header and then it wont need to be a dictionary
+        # TODO: maybe make a function to handle different data types and what we need to do with them
+        if data_type == "CONNECT_REQUEST":
+            if code not in list(client_ids.keys()):
+                code = list(client_ids.keys())[list(client_ids.values()).index(sock)] # get code from socket object
+                data = create_sendable_data(b"", "CONNECT_NOT_FOUND", code)
+        else:
+            data = data.encode('utf-8')  # Encode the data
+            data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent
         m_handler.update(code, data)
     except Exception as e:
         print(f"Error handling socket: {e}") # todo: remove this

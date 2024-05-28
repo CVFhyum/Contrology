@@ -1,9 +1,14 @@
 import threading as thr
+from time import sleep as sl
 
-def foo(name):
-    print(f"hi {name}")
+def foo():
+    print("hello")
+    sl(5)
+    event.set()
 
+event = thr.Event()
 thread = thr.Thread(target=foo)
-thread.__init__(target=foo, args=("hello",))
-
 thread.start()
+
+event.wait()
+print("hi")

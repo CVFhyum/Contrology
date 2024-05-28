@@ -13,7 +13,8 @@ from typing import Dict
 def get_geometry_string(window_width: int, window_height: int) -> str:
     screen_width, screen_height = get_resolution_of_primary_monitor()
     x_offset, y_offset = int((screen_width-window_width)/2), int((screen_height-window_height)/2)
-    return f"{window_width}x{window_height}+{x_offset}+{y_offset}"
+    # TODO: remove extra screen offset
+    return f"{window_width}x{window_height}+{x_offset+screen_width}+{y_offset}"
 
 # Get resolution of monitor that is marked as primary by the OS.
 def get_resolution_of_primary_monitor() -> tuple[int,int]:
