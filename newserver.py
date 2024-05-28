@@ -44,15 +44,18 @@ def handle_client(sock: socket.socket):
         # TODO: maybe make message handler read the code from the header and then it wont need to be a dictionary
         # TODO: maybe make a function to handle different data types and what we need to do with them
         if code not in list(client_ids.keys()):
-            code = list(client_ids.keys())[list(client_ids.values()).index(sock)] # get code from socket object
+            code = get_code_from_sock(client_ids, sock) # get code from socket object
             data = create_sendable_data(b"", "CODE_NOT_FOUND", code)
-        match data_type:
-            case "CONNECT_REQUEST":
-                data = f"{RECIPIENT_HEADER_LENGTH}{get_bare_hostname(sock.getsockname()[0])}"
-                data = data.encode('utf-8')
-            case _:
-                data = data.encode('utf-8')  # Encode the data
-                data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent
+        else:
+            match data_type:
+                case "CONNECT_REQUEST":
+                    # The data should be {code}{hostname} (both of the controller so the remote knows)
+                    data = f"{get_code_from_sock(client_ids, sock)}{get_bare_hostname(sock.getsockname()[0])}"
+                    data = data.encode('utf-8')
+                    data = create_sendable_data(data, data_type, code)
+                case _:
+                    data = data.encode('utf-8')  # Encode the data
+                    data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent
         m_handler.update(code, data)
     except Exception as e:
         print(f"Error handling socket: {e}") # todo: remove this

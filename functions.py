@@ -68,10 +68,10 @@ def get_hhmmss():
 # Generate a 10 character alphanumeric code for every client that connects to the server
 # This code is used for identifying clients.
 def generate_alphanumeric_code(existing_client_ids: Dict[str, socket.socket]) -> str:
-    code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(RECIPIENT_HEADER_LENGTH)])  # Make new code
+    code = "".join([r.choice(CODE_CHARACTER_POOL) for x in range(RECIPIENT_HEADER_LENGTH)])  # Make new code
     # TODO: make the pool of used codes come from sql, not the temporary client ids
     while code in existing_client_ids.keys() or code == SERVER_CODE or code == ALL_CODE:  # Check code doesn't exist, if it does make another one
-        code = "".join([r.choice(ALPHANUMERIC_CHARACTERS) for x in range(RECIPIENT_HEADER_LENGTH)])
+        code = "".join([r.choice(CODE_CHARACTER_POOL) for x in range(RECIPIENT_HEADER_LENGTH)])
     return code
 
 def get_resized_image(image_path: str, size: tuple[int, int]) -> ImageTk.PhotoImage:
@@ -94,4 +94,7 @@ def get_bare_hostname(ip_addr: str) -> str:
         # Handle the case where the hostname could not be resolved
         print(f"Error resolving hostname: {e}")
         return None
+
+def get_code_from_sock(client_ids: Dict[str, socket.socket], sock: socket.socket):
+    return list(client_ids.keys())[list(client_ids.values()).index(sock)]
 

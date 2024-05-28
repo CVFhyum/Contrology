@@ -1,5 +1,3 @@
-import base64
-
 from functions import *
 from constants import *
 from configuration import *
@@ -27,8 +25,9 @@ def trackvar():
         sleep(1)
         with data_handler_lock:
             length = len(d_handler.incoming_data_queue)
-            ic(d_handler.incoming_data_queue)
-        ic(client_thread.is_alive(), length)
+            # ic(d_handler.incoming_data_queue)
+        ic(general_connection_thread.is_alive(),length)
+        ic(controlling_connection_thread.is_alive())
 
 
 # Implementation of the WindowManager class.
@@ -141,6 +140,7 @@ def handle_controlling_connection(connect_code):
     wait_for_connection_response.wait()
     wait_for_connection_response.clear()
     print("Permission granted!")
+    # TODO: open a window and start receiving the juicy image bytes
 
 
 def on_main_close():
@@ -236,8 +236,9 @@ class LaunchScreenButtonsFrame(tk.Frame):
         self.dimensions()
 
     def create_widgets(self):
-        # Callbacks
-        def switch_admin_widgets(_=None):  # todo: doc
+        """ Callbacks """
+        # Takes care of swapping the button widget with the entry widget on the launch screen
+        def switch_admin_widgets(_=None):
             # _ is not None if the function is invoked by pressing the escape key
             # admin_button_view is True if the button is currently visible
             # If the parenthetical expression evaluates to True, the button is visible and escape was pressed
@@ -253,22 +254,25 @@ class LaunchScreenButtonsFrame(tk.Frame):
                     self.admin_password_entry_var.set("")
                     self.admin_button_view = True
 
-        def admin_password_entry_focus_in(_=None):  # todo: doc
+        # When the password entry gets focus, this callback is invoked, which deletes the default "Enter password..." text
+        def admin_password_entry_focus_in(_=None):
             admin_password_entry.configure(style='black.TEntry',show='')
             if self.admin_password_entry_var.get() == "Enter password...":
                 self.admin_password_entry_var.set("")
 
-        def admin_password_entry_focus_out(_=None):  # todo: doc
+        # When the password entry loses focus, this callback is invoked, which sets the default "Enter password..." text if the entry is empty
+        def admin_password_entry_focus_out(_=None):
             if self.admin_password_entry_var.get() == "":
                 admin_password_entry.configure(style='grey.TEntry',show='')
                 self.admin_password_entry_var.set("Enter password...")
 
-        def admin_password_entry_handle_enter(_=None):  # todo: doc
+        # When Enter is pressed while the password entry has focus, this callback is invoked. It verifies the password and TODO: tells the wm to open the admin screen.
+        def admin_password_entry_handle_enter(_=None):
             # todo: handle the entered password (verify it)
             print(self.admin_password_entry_var.get())
 
         def try_to_connect():
-            global connected, client_thread
+            global connected, general_connection_thread
             self.feedback_label_var.set("Trying to connect...")
             feedback_label.config(foreground='green')
             self.update()  # Fixes weird bug where screen doesn't update
@@ -285,8 +289,8 @@ class LaunchScreenButtonsFrame(tk.Frame):
                 connected = None
                 return
             connected = True
-            client_thread = thr.Thread(target=handle_general_connection,args=(sock,))
-            client_thread.start()
+            general_connection_thread = thr.Thread(target=handle_general_connection,args=(sock,))
+            general_connection_thread.start()
             wm.open_main_screen()
 
         # Creation
@@ -409,8 +413,9 @@ class MainScreenConnectFrame(tk.Frame):
         self.columnconfigure(0, weight=1)
 
     def set_up_connection_thread(self):
-        connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get(),))
-        connection_thread.start()
+        global controlling_connection_thread
+        controlling_connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get(),))
+        controlling_connection_thread.start()
 
 
 
@@ -433,7 +438,8 @@ class MainScreenRecentFrame(tk.Frame):
 
 
 if __name__ == "__main__":
-    client_thread = thr.Thread()
+    general_connection_thread = thr.Thread()
+    controlling_connection_thread = thr.Thread()
     track = thr.Thread(target=trackvar, daemon=True)
     track.start()
     d_handler = DataHandler()
