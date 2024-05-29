@@ -1,14 +1,11 @@
-import threading as thr
-from time import sleep as sl
+import tkinter as tk
 
-def foo():
-    print("hello")
-    sl(5)
-    event.set()
+root = tk.Tk()
 
-event = thr.Event()
-thread = thr.Thread(target=foo)
-thread.start()
+t = tk.Text(root)
+t.grid(row=0,column=0)
+t.tag_configure("red", foreground="red")
+t.insert(tk.END, "hello", "red")
 
-event.wait()
-print("hi")
+
+root.mainloop()

@@ -4,7 +4,7 @@ from configuration import *
 from data_handler import DataHandler
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 import socket
 import threading as thr
@@ -19,6 +19,7 @@ data_handler_lock = thr.Lock()  # Lock to prevent race conditions on the DataHan
 accept_data = True  # Flag that is disabled when the client is interrupted or quits. This will make sure that necessary information-receiving threads are stopped.
 connected = False  # Flag that documents if the client is currently connected to the socket.
 wait_for_connection_response = thr.Event()
+control_permission_granted = False  # Flag that signifies permission to control a remote.
 
 def trackvar():
     while accept_data:
@@ -84,7 +85,7 @@ class WindowManager:
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
 # This thread takes care of receiving incoming data from the server and loading it into incoming_data
 def handle_general_connection(c: socket.socket):
-    global self_code, connected, accept_data
+    global self_code, connected, accept_data, control_permission_granted
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
     ic(self_code)
     # If the initialisation header that was sent by the server has extra data, raise this error
@@ -108,9 +109,17 @@ def handle_general_connection(c: socket.socket):
                                     case "CONNECT_REQUEST":
                                         requester_code, requester_hostname = data[:RECIPIENT_HEADER_LENGTH], data[RECIPIENT_HEADER_LENGTH:]
                                         # TODO: instantly accepting if a request is sent currently, handle that here.
-                                        d_handler.insert_new_outgoing_message((create_sendable_data(b"", "CONNECT_ACCEPT", requester_code)))
+                                        permission_granted = messagebox.askyesno("New connection incoming!", message=f"You have a new connection incoming!\nName: {requester_hostname}\nCode: {requester_code}")
+                                        if permission_granted:
+                                            d_handler.insert_new_outgoing_message((create_sendable_data(b"", "CONNECT_ACCEPT", requester_code)))
+                                        else:
+                                            d_handler.insert_new_outgoing_message((create_sendable_data(b"","CONNECT_DENY",requester_code)))
                                         # d_handler.insert_new_incoming_message((data_type, data)) # TODO: change this if decide to use connec requests attr
                                     case "CONNECT_ACCEPT":
+                                        control_permission_granted = True
+                                        wait_for_connection_response.set()
+                                    case "CONNECT_DENY":
+                                        control_permission_granted = False
                                         wait_for_connection_response.set()
                                     case _:
                                         d_handler.insert_new_incoming_message((data_type, data))
@@ -133,13 +142,19 @@ def handle_general_connection(c: socket.socket):
         c.close()
 
 def handle_controlling_connection(connect_code):
+    global control_permission_granted
     if connect_code == self_code:
         raise Exception("Self code was given") # TODO: make this part of the code not raise an error, but change a label in tkinter
     with data_handler_lock:
         d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_REQUEST",connect_code))
     wait_for_connection_response.wait()
     wait_for_connection_response.clear()
-    print("Permission granted!")
+    if control_permission_granted:
+        print("Permission granted!")
+    else:
+        # TODO: add message that says that request was denied
+        pass
+
     # TODO: open a window and start receiving the juicy image bytes
 
 
@@ -207,9 +222,9 @@ class LaunchScreenBannerFrame(tk.Frame):
         self.dimensions()
 
     def create_widgets(self):
-        # Creation
+        """ Creation """
         main_banner = ttk.Label(self,image=self.banner_trans)
-        # Placement
+        """ Placement """
         main_banner.grid(row=0,column=0)
 
     def dimensions(self):
@@ -293,20 +308,20 @@ class LaunchScreenButtonsFrame(tk.Frame):
             general_connection_thread.start()
             wm.open_main_screen()
 
-        # Creation
+        """ Creation """
         launch_app_button = ttk.Button(self,text="Launch App", style=apply_consolas_to_widget("Button", 32), command=try_to_connect)
         feedback_label = ttk.Label(self, textvariable=self.feedback_label_var, font=consolas(12), foreground='green')
         admin_log_in_button = ttk.Button(self, text="Administrator Log In", style=apply_consolas_to_widget("Button", 12), command=switch_admin_widgets)
         admin_password_entry = ttk.Entry(self, textvariable=self.admin_password_entry_var, style='grey.TEntry',font=consolas(13))
 
-        # Placement
+        """ Placement """
         launch_app_button.grid(row=0,column=0,sticky='s')
         feedback_label.grid(row=1,column=0,sticky='n')
         admin_log_in_button.grid(row=2,column=0)
         admin_password_entry.grid(row=2,column=0)
         admin_password_entry.grid_remove()  # Remove it at initialization because it should only appear when the button is pressed
 
-        # Bindings
+        """ Bindings """
         admin_password_entry.bind("<FocusIn>",admin_password_entry_focus_in)
         admin_password_entry.bind("<FocusOut>",admin_password_entry_focus_out)
         admin_password_entry.bind("<Return>",admin_password_entry_handle_enter)
@@ -381,7 +396,6 @@ class MainScreenInfoFrame(tk.Frame):
 
         my_code_value_label.bind('<1>', lambda event: [cc_copy(self_code), thr.Thread(target=show_copied_message).start()])
         my_code_click_to_copy_label.bind('<1>', lambda event: [cc_copy(self_code), thr.Thread(target=show_copied_message).start()])
-
 
     def dimensions(self):
         self.columnconfigure(1, weight=1)
