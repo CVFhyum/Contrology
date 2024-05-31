@@ -8,13 +8,14 @@ import random as r
 from PIL import Image, ImageTk
 import socket
 from typing import Dict
+import threading as thr
 
 # With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
 def get_geometry_string(window_width: int, window_height: int) -> str:
     screen_width, screen_height = get_resolution_of_primary_monitor()
     x_offset, y_offset = int((screen_width-window_width)/2), int((screen_height-window_height)/2)
     # TODO: remove extra screen offset
-    return f"{window_width}x{window_height}+{x_offset+screen_width}+{y_offset}"
+    return f"{window_width}x{window_height}+{x_offset}+{y_offset}"
 
 # Get resolution of monitor that is marked as primary by the OS.
 def get_resolution_of_primary_monitor() -> tuple[int,int]:
@@ -98,3 +99,15 @@ def get_bare_hostname(ip_addr: str) -> str:
 def get_code_from_sock(client_ids: Dict[str, socket.socket], sock: socket.socket):
     return list(client_ids.keys())[list(client_ids.values()).index(sock)]
 
+class FlagObject:
+    def __init__(self, flag):
+        self.flag = flag
+
+    def true(self):
+        self.flag = True
+
+    def false(self):
+        self.flag = False
+
+    def __bool__(self):
+        return self.flag

@@ -50,7 +50,7 @@ def handle_client(sock: socket.socket):
             match data_type:
                 case "CONNECT_REQUEST":
                     # The data should be {code}{hostname} (both of the controller so the remote knows)
-                    data = f"{get_code_from_sock(client_ids, sock)}{get_bare_hostname(sock.getsockname()[0])}"
+                    data = f"{get_code_from_sock(client_ids, sock)}{get_bare_hostname(sock.getpeername()[0])}"
                     data = data.encode('utf-8')
                     data = create_sendable_data(data, data_type, code)
                 case _:

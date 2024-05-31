@@ -5,19 +5,25 @@ from data_handler import DataHandler
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageSequence
 import socket
 import threading as thr
 import select
-from typing import Optional
+from typing import Optional, Any
 from pyperclip import copy as cc_copy
 from time import sleep
+from random import randint as ri
 
 # Global variables that can be accessed all throughout the code
 self_code = ""  # This client's code
 data_handler_lock = thr.Lock()  # Lock to prevent race conditions on the DataHandler obj
 accept_data = True  # Flag that is disabled when the client is interrupted or quits. This will make sure that necessary information-receiving threads are stopped.
 connected = False  # Flag that documents if the client is currently connected to the socket.
+incoming_requests_frame_obj: Any = None
+outgoing_requests_frame_obj: Any = None
+controlling_connection_thread_flags = {}
+remote_connection_thread_flags = {}
+
 wait_for_connection_response = thr.Event()
 control_permission_granted = False  # Flag that signifies permission to control a remote.
 
@@ -75,6 +81,12 @@ class WindowManager:
         self.main_screen_root = MainScreen()
         self.main_screen_root.mainloop()
 
+    def update_all(self):
+        if self.launch_screen_root is not None:
+            self.launch_screen_root.update()
+        if self.main_screen_root is not None:
+            self.main_screen_root.update()
+
     def close_all(self):
         if self.launch_screen_root is not None:
             self.launch_screen_root.destroy()
@@ -108,13 +120,16 @@ def handle_general_connection(c: socket.socket):
                                 match data_type:
                                     case "CONNECT_REQUEST":
                                         requester_code, requester_hostname = data[:RECIPIENT_HEADER_LENGTH], data[RECIPIENT_HEADER_LENGTH:]
+                                        remote_connection_thread = thr.Thread(target=handle_remote_connection, args=(requester_code, requester_hostname, remote_connection_thread.name))
+                                        remote_connection_thread_flags.update({remote_connection_thread.name: (thr.Event(), FlagObject(False))})
+                                        remote_connection_thread.start()
                                         # TODO: instantly accepting if a request is sent currently, handle that here.
-                                        permission_granted = messagebox.askyesno("New connection incoming!", message=f"You have a new connection incoming!\nName: {requester_hostname}\nCode: {requester_code}")
-                                        if permission_granted:
-                                            d_handler.insert_new_outgoing_message((create_sendable_data(b"", "CONNECT_ACCEPT", requester_code)))
-                                        else:
-                                            d_handler.insert_new_outgoing_message((create_sendable_data(b"","CONNECT_DENY",requester_code)))
-                                        # d_handler.insert_new_incoming_message((data_type, data)) # TODO: change this if decide to use connec requests attr
+                                        # permission_granted = True
+                                        # if permission_granted:
+                                        #     d_handler.insert_new_outgoing_message((create_sendable_data(b"", "CONNECT_ACCEPT", requester_code)))
+                                        # else:
+                                        #     d_handler.insert_new_outgoing_message((create_sendable_data(b"","CONNECT_DENY",requester_code)))
+                                        # d_handler.insert_new_incoming_message((data_type, data)) # TODO: change this if decide to use connec requests attr in dhandler
                                     case "CONNECT_ACCEPT":
                                         control_permission_granted = True
                                         wait_for_connection_response.set()
@@ -141,6 +156,7 @@ def handle_general_connection(c: socket.socket):
 
         c.close()
 
+# Handles requesting control of another machine
 def handle_controlling_connection(connect_code):
     global control_permission_granted
     if connect_code == self_code:
@@ -157,6 +173,20 @@ def handle_controlling_connection(connect_code):
 
     # TODO: open a window and start receiving the juicy image bytes
 
+# Handles an incoming request to control self machine
+def handle_remote_connection(requester_code, requester_hostname, thread_name):
+    # display a new request frame in the incoming requests using the two args
+    # use the third arg to receive the event and flag objects from the main dictionary
+    event, flag = remote_connection_thread_flags[thread_name]
+    incoming_requests_frame_obj.add_request_frame(requester_hostname, requester_code, event, flag)
+    event.wait()
+    if flag:
+        print("You clicked yes!")
+    else:
+        print("You clicked no :(")
+
+
+    pass
 
 def on_main_close():
     global accept_data
@@ -177,10 +207,13 @@ def consolas(size: int):
 # https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/ttk-style-layer.html
 # Makes a style that has the consolas font for a specific widget at a desired size
 # Returns the string of the style name
-def apply_consolas_to_widget(widget_type: str, size: int) -> str:
+def apply_consolas_to_widget(widget_type: str, size: int, colour: Optional[str] = None) -> str:
     s = ttk.Style()
-    s.configure(f'{size}.T{widget_type}', font=consolas(size))
-    return f"{size}.T{widget_type}"
+    style_string = f'{size}{colour}.T{widget_type}'
+    s.configure(style_string, font=consolas(size))
+    if colour is not None:
+        s.configure(style_string, foreground=colour)
+    return style_string
 
 
 class LaunchScreen(tk.Tk):
@@ -349,7 +382,7 @@ class MainScreen(tk.Tk):
         # Widgets
         self.top_frame = MainScreenInfoFrame(self)
         self.middle_frame = MainScreenConnectFrame(self)
-        self.bottom_frame = MainScreenRecentFrame(self)
+        self.bottom_frame = MainScreenUtilitiesFrame(self)
 
         # Functions
         self.dimensions()
@@ -400,7 +433,6 @@ class MainScreenInfoFrame(tk.Frame):
     def dimensions(self):
         self.columnconfigure(1, weight=1)
         self.grid_propagate(False)
-
 class MainScreenConnectFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -430,25 +462,284 @@ class MainScreenConnectFrame(tk.Frame):
         global controlling_connection_thread
         controlling_connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get(),))
         controlling_connection_thread.start()
-
-
-
-
-class MainScreenRecentFrame(tk.Frame):
+class MainScreenUtilitiesFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.parent = parent
         self.grid(row=2, column=0)  # change
         self.configure(width=parent.width,height=parent.height*0.4)  # change
-        self.configure(highlightthickness=1,highlightbackground='green')  # debug view
+        # self.configure(highlightthickness=1,highlightbackground='green')  # debug view
+        self.update()
+
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        incoming_title_label = ttk.Label(self,text="Incoming Requests", font=consolas(16))
+        outgoing_title_label = ttk.Label(self,text="Outgoing Requests", font=consolas(16))
+        recent_title_label = ttk.Label(self,text="Recent Sessions", font=consolas(16))
+        incoming_title_label.grid(row=0,column=0)
+        outgoing_title_label.grid(row=0,column=1)
+        recent_title_label.grid(row=0,column=2)
+
+        scrollable_incoming_canvas = CanvasScrollbarFrame(parent=self,row=1,column=0,width_multiplier=0.2, request_type="incoming")
+        scrollable_outgoing_canvas = CanvasScrollbarFrame(parent=self,row=1,column=1,width_multiplier=0.2, request_type="outgoing")
+
+    def dimensions(self):
+        self.grid_rowconfigure(1,weight=1)
+        self.grid_columnconfigure(2, weight=1)
+        self.grid_propagate(False)
+
+
+# Frame that encapsulates the ScrollableCanvasWidget and belongs to MainScreenUtilitiesFrame
+class CanvasScrollbarFrame(tk.Frame):
+    def __init__(self, *, parent, row, column, width_multiplier, request_type):
+        super().__init__(parent)
+        self.configure(width=parent.winfo_width()*width_multiplier)
+        self.scrollable_canvas = ScrollableCanvasWidget(parent=self,width=parent.winfo_width() * width_multiplier,request_type=request_type)
+        self.grid(row=row,column=column,sticky='nsew')
+        self.update_idletasks()
+        self.grid_propagate(False)
+
+# Custom widget that is a combination of a scrollable canvas and a scrollbar.
+# The scrollable frame inside is either a UtilitiesIncomingRequestsFrame or a UtilitiesOutgoingRequestsFrame
+class ScrollableCanvasWidget(tk.Canvas):
+    def __init__(self, *, parent, width, request_type):
+        global incoming_requests_frame_obj, outgoing_requests_frame_obj
+        super().__init__(parent)
+        self.parent = parent
+        self.configure(width=width)
+        self.configure(highlightthickness=0)
+        match request_type:
+            case "incoming":
+                self.scrollable_frame = UtilitiesIncomingRequestsFrame(self)
+                incoming_requests_frame_obj = self.scrollable_frame
+            case "outgoing":
+                self.scrollable_frame = UtilitiesOutgoingRequestsFrame(self)
+                outgoing_requests_frame_obj = self.scrollable_frame
+            case _:
+                raise Exception("Invalid request type (not incoming/outgoing)")
+
+        self.create_window((0,0),window=self.scrollable_frame,anchor="nw")
+        self.scrollable_frame.bind("<Configure>",self.on_frame_configure)
+
+        self.scrollbar = ttk.Scrollbar(parent,orient="vertical",command=self.yview)
+        self.configure(yscrollcommand=self.scrollbar.set)
+
+        self.grid(row=0,column=0,sticky="nsew")
+        self.scrollbar.grid(row=0,column=1,sticky="ns")
+
+        # Bind mouse wheel events
+        self.bind("<MouseWheel>",self.on_mouse_wheel)  # Windows
+        self.bind("<Button-4>",self.on_mouse_wheel)  # Linux
+        self.bind("<Button-5>",self.on_mouse_wheel)  # Linux
+
+    def on_frame_configure(self, event):
+        self.configure(scrollregion=self.bbox("all"))
+
+    def on_mouse_wheel(self,event):
+        ic()
+        # For Windows and macOS
+        if event.delta:
+            self.yview_scroll(int(-1 * (event.delta / 120)),"units")
+        # For Linux (event.num is used instead of event.delta)
+        elif event.num == 4:
+            self.yview_scroll(-1,"units")
+        elif event.num == 5:
+            self.yview_scroll(1,"units")
+
+class UtilitiesIncomingRequestsFrame(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.grid(row=0, column=0) # change
+        # self.configure(width=parent.winfo_reqwidth(), height=parent.winfo_reqheight())
+        self.configure(highlightthickness=0)
+
+        self.request_frames = []
+        self.separator_frames: list[tk.Frame] = []
+
+        self.create_widgets()
+        self.dimensions()
+
+    def add_request_frame(self, hostname_text,code_text,event,flag,_=None):
+        separator_row = 2 * len(self.request_frames)
+        request_frame_row = separator_row + 1
+        separator = SeparatorFrame(self,self.parent.winfo_reqwidth() / 2,"grey")
+        separator.grid(row=separator_row,column=0)
+        request_frame = RequestFrame(parent=self,hostname_text=hostname_text,code_text=code_text,request_type="incoming",event=event,flag=flag)
+        request_frame.grid(row=request_frame_row,column=0,sticky='ew',pady=5)
+        self.request_frames.append(request_frame)
+        self.separator_frames.append(separator)
+        self.parent.on_frame_configure(None)
+
+    def remove_request_frame(self, request_frame):
+        request_frame_index = self.request_frames.index(request_frame)
+        separator = self.separator_frames[request_frame_index]
+        request_frame.grid_forget()
+        separator.grid_forget()
+        self.request_frames.remove(request_frame)
+        self.separator_frames.remove(separator)
+        self.update_frames()
+
+    def update_frames(self):
+        for i,(request_frame,separator) in enumerate(zip(self.request_frames,self.separator_frames)):
+            separator_row = 2 * i
+            frame_row = 2 * i + 1
+            separator.grid(row=separator_row,column=0)
+            request_frame.grid(row=frame_row,column=0,sticky='ew',pady=5)
+        self.parent.on_frame_configure(None)
+
+    def create_widgets(self):
+
+        self.bind_all('a', lambda event: self.add_request_frame(ri(1,100), ri(1,100), event))
+        self.bind("<MouseWheel>",self.parent.on_mouse_wheel)  # Windows
+        self.bind("<Button-4>",self.parent.on_mouse_wheel)  # Linux
+        self.bind("<Button-5>",self.parent.on_mouse_wheel)  # Linux
+
+    def dimensions(self):
+        self.grid_columnconfigure(0, weight=1)
+
+class UtilitiesOutgoingRequestsFrame(tk.Frame):
+    def __init__(self,parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.grid(row=0,column=0)  # change
+        # self.configure(width=parent.winfo_reqwidth(), height=parent.winfo_reqheight())
+
+        self.request_frames = []
+        self.separator_frames: list[tk.Frame] = []
+
+        self.create_widgets()
+        self.dimensions()
+
+    def add_request_frame(self,hostname_text,code_text,event=None):
+        separator_row = 2 * len(self.request_frames)
+        request_frame_row = separator_row + 1
+        separator = SeparatorFrame(self,self.parent.winfo_reqwidth() / 2,"grey")
+        separator.grid(row=separator_row,column=0)
+        request_frame = RequestFrame(parent=self,hostname_text=hostname_text,code_text=code_text,request_type="outgoing")
+        request_frame.grid(row=request_frame_row,column=0,sticky='ew',pady=5)
+        self.request_frames.append(request_frame)
+        self.separator_frames.append(separator)
+        self.parent.on_frame_configure(None)
+
+    def remove_request_frame(self,request_frame):
+        request_frame_index = self.request_frames.index(request_frame)
+        separator = self.separator_frames[request_frame_index]
+        request_frame.grid_forget()
+        separator.grid_forget()
+        self.request_frames.remove(request_frame)
+        self.separator_frames.remove(separator)
+        self.update_frames()
+
+    def update_frames(self):
+        for i,(request_frame,separator) in enumerate(zip(self.request_frames,self.separator_frames)):
+            separator_row = 2 * i
+            frame_row = 2 * i + 1
+            separator.grid(row=separator_row,column=0)
+            request_frame.grid(row=frame_row,column=0,sticky='ew',pady=5)
+        self.parent.on_frame_configure(None)
+
+    def create_widgets(self):
+        self.bind_all('s',lambda event: self.add_request_frame(ri(1,100),ri(1,100),event))
+        self.bind("<MouseWheel>",self.parent.on_mouse_wheel)  # Windows
+        self.bind("<Button-4>",self.parent.on_mouse_wheel)  # Linux
+        self.bind("<Button-5>",self.parent.on_mouse_wheel)  # Linux
+
+    def dimensions(self):
+        self.grid_columnconfigure(0,weight=1)
+
+# Frame that holds the widgets of each individual request to control/to be a remote
+class RequestFrame(ttk.Frame):
+    def __init__(self, *, parent, hostname_text, code_text, request_type, event, flag):
+        super().__init__(parent)
+        self.parent = parent
+        self.hostname_text = hostname_text
+        self.code_text = code_text
+        self.configure(width=parent.parent.winfo_reqwidth(),height=70)
+        self.request_type = request_type
+        self.event = event
+        self.flag = flag
 
         self.create_widgets()
         self.dimensions()
 
     def create_widgets(self):
-        pass
+        hostname_label = ttk.Label(self, text=self.hostname_text,font=consolas(12))
+        code_label = ttk.Label(self,text=self.code_text,font=consolas(12))
+
+        hostname_label.grid(row=0,column=0)
+        code_label.grid(row=1,column=0)
+
+        match self.request_type:
+            case "incoming":
+                accept_button = ttk.Button(self, text="Accept",style=apply_consolas_to_widget("Button", 12, "green"), command=lambda: [self.event.set(), self.flag.true()])
+                # TODO: send the deny request packet from here, or call a function to do it
+                deny_button = ttk.Button(self,text="Deny",style=apply_consolas_to_widget("Button", 12, "red"),command=lambda: self.parent.remove_request_frame(self))
+                accept_button.grid(row=0,column=1,padx=3,pady=3)
+                deny_button.grid(row=1,column=1,padx=3,pady=3)
+                widgets = [hostname_label,code_label,accept_button,deny_button]
+            case "outgoing":
+                waiting_label = ttk.Label(self, text="Waiting...",font=consolas(10))
+                loading_gif_label = AnimatedGIF(self,"assets/loading.gif",size=(25,25))
+                waiting_label.grid(row=0,column=1)
+                loading_gif_label.grid(row=1,column=1)
+                widgets = [hostname_label,code_label,waiting_label,loading_gif_label]
+            case _:
+                raise Exception("Invalid request type (not incoming/outgoing)")
+
+        for widget in widgets:
+            widget.bind("<MouseWheel>",self.parent.parent.on_mouse_wheel)  # Windows
+            widget.bind("<Button-4>",self.parent.parent.on_mouse_wheel)  # Linux
+            widget.bind("<Button-5>",self.parent.parent.on_mouse_wheel)  # Linux
+
+        self.bind("<MouseWheel>",self.parent.parent.on_mouse_wheel)  # Windows
+        self.bind("<Button-4>",self.parent.parent.on_mouse_wheel)  # Linux
+        self.bind("<Button-5>",self.parent.parent.on_mouse_wheel)  # Linux
 
     def dimensions(self):
+        self.rowconfigure((0,1), weight=1)
+        self.columnconfigure(0, weight=1)
         self.grid_propagate(False)
+
+# Frame that acts as a separator between RequestFrame's/
+class SeparatorFrame(tk.Frame):
+    def __init__(self, parent, width, colour):
+        super().__init__(parent)
+        self.parent = parent
+        self.width = width
+        self.colour = colour
+        self.configure(background=colour)
+        self.configure(width=width, height=1)
+        self.bind("<MouseWheel>",self.parent.parent.on_mouse_wheel)  # Windows
+        self.bind("<Button-4>",self.parent.parent.on_mouse_wheel)  # Linux
+        self.bind("<Button-5>",self.parent.parent.on_mouse_wheel)  # Linux
+
+# Label that breaks down a gif into multiple images and displays them, seeming like a gif.
+class AnimatedGIF(tk.Label):
+    def __init__(self, parent, path, size=None, *args, **kwargs):
+        super().__init__(parent,*args,**kwargs)
+        self.path = path
+        self.size = size
+        self.frames = self.load_frames()
+        self.current_frame = 0
+        self.update_animation()
+
+    def load_frames(self):
+        frames = []
+        gif = Image.open(self.path)
+        for frame in ImageSequence.Iterator(gif):
+            if self.size:
+                frame = frame.resize(self.size, Image.Resampling.LANCZOS)
+            frames.append(ImageTk.PhotoImage(frame))
+        return frames
+
+    def update_animation(self):
+        self.configure(image=self.frames[self.current_frame])
+        self.current_frame = (self.current_frame + 1) % len(self.frames)
+        self.after(100, self.update_animation)
 
 
 if __name__ == "__main__":
@@ -459,4 +750,3 @@ if __name__ == "__main__":
     d_handler = DataHandler()
     wm = WindowManager()
     wm.open_launch_screen()
-
