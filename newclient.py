@@ -12,15 +12,13 @@ from configuration import *
 from functions import *
 from constants import *
 
-
-SCREEN_WIDTH, SCREEN_HEIGHT = get_resolution_of_primary_monitor()
-
 # todo: don't hardcode the rect on the first screen.
-# use screeninfo to find out the coordinate system and from that make a gui to choose monitors
+# todo: use screeninfo to find out the coordinate system and from that make a gui to choose monitors
 def send_continuous_screenshots(sock: socket.socket):
+    screen_width, screen_height = get_resolution_of_primary_monitor()
     with mss() as sct:
         while True:
-            rect = {'top': 0,'left': 0,'width': SCREEN_WIDTH,'height': SCREEN_HEIGHT}
+            rect = {'top': 0,'left': 0,'width': screen_width,'height': screen_height}
             new_screenshot = sct.grab(rect)
             ss_bytes = new_screenshot.rgb
             ready_data = create_sendable_data(ss_bytes, "IMAGE", ALL_CODE)

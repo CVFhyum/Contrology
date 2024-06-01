@@ -13,6 +13,7 @@ from typing import Optional, Any
 from pyperclip import copy as cc_copy
 from time import sleep
 from random import randint as ri
+from mss.windows import MSS
 
 # Global variables that can be accessed all throughout the code
 self_code = ""  # This client's code
@@ -21,8 +22,9 @@ accept_data = True  # Flag that is disabled when the client is interrupted or qu
 connected = False  # Flag that documents if the client is currently connected to the socket.
 incoming_requests_frame_obj: Any = None
 outgoing_requests_frame_obj: Any = None
-controlling_connection_thread_flags = {}
+controlling_connection_thread_flags = thr.Event(), FlagObject(False)
 remote_connection_thread_flags = {}
+remote_thread_id = 0
 
 wait_for_connection_response = thr.Event()
 control_permission_granted = False  # Flag that signifies permission to control a remote.
@@ -34,7 +36,6 @@ def trackvar():
             length = len(d_handler.incoming_data_queue)
             # ic(d_handler.incoming_data_queue)
         ic(general_connection_thread.is_alive(),length)
-        ic(controlling_connection_thread.is_alive())
 
 
 # Implementation of the WindowManager class.
@@ -97,14 +98,14 @@ class WindowManager:
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
 # This thread takes care of receiving incoming data from the server and loading it into incoming_data
 def handle_general_connection(c: socket.socket):
-    global self_code, connected, accept_data, control_permission_granted
+    global self_code, connected, accept_data, control_permission_granted, remote_thread_id
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
     ic(self_code)
     # If the initialisation header that was sent by the server has extra data, raise this error
     if data_length > 0:
-        raise Exception("Extra data was sent on initialisation")
+        raise Exception(f"Extra data was sent on initialisation {data_length}")
     if connection_status == "INITIAL_ACCEPT":
-        c.setblocking(False)
+        # c.setblocking(False)
         while accept_data:
             try:
                 # This thread should not block, so data is read asynchronously
@@ -120,9 +121,10 @@ def handle_general_connection(c: socket.socket):
                                 match data_type:
                                     case "CONNECT_REQUEST":
                                         requester_code, requester_hostname = data[:RECIPIENT_HEADER_LENGTH], data[RECIPIENT_HEADER_LENGTH:]
-                                        remote_connection_thread = thr.Thread(target=handle_remote_connection, args=(requester_code, requester_hostname, remote_connection_thread.name))
-                                        remote_connection_thread_flags.update({remote_connection_thread.name: (thr.Event(), FlagObject(False))})
+                                        remote_connection_thread = thr.Thread(target=handle_remote_connection, args=(requester_code, requester_hostname, remote_thread_id))
+                                        remote_connection_thread_flags.update({remote_thread_id: (thr.Event(),FlagObject(False))})
                                         remote_connection_thread.start()
+                                        remote_thread_id += 1
                                         # TODO: instantly accepting if a request is sent currently, handle that here.
                                         # permission_granted = True
                                         # if permission_granted:
@@ -131,11 +133,13 @@ def handle_general_connection(c: socket.socket):
                                         #     d_handler.insert_new_outgoing_message((create_sendable_data(b"","CONNECT_DENY",requester_code)))
                                         # d_handler.insert_new_incoming_message((data_type, data)) # TODO: change this if decide to use connec requests attr in dhandler
                                     case "CONNECT_ACCEPT":
-                                        control_permission_granted = True
-                                        wait_for_connection_response.set()
+                                        event, flag = controlling_connection_thread_flags
+                                        event.set()
+                                        flag.true()
                                     case "CONNECT_DENY":
-                                        control_permission_granted = False
-                                        wait_for_connection_response.set()
+                                        event,flag = controlling_connection_thread_flags
+                                        event.set()
+                                        flag.false()
                                     case _:
                                         d_handler.insert_new_incoming_message((data_type, data))
                         else:
@@ -156,37 +160,51 @@ def handle_general_connection(c: socket.socket):
 
         c.close()
 
-# Handles requesting control of another machine
-def handle_controlling_connection(connect_code):
-    global control_permission_granted
-    if connect_code == self_code:
-        raise Exception("Self code was given") # TODO: make this part of the code not raise an error, but change a label in tkinter
-    with data_handler_lock:
-        d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_REQUEST",connect_code))
-    wait_for_connection_response.wait()
-    wait_for_connection_response.clear()
-    if control_permission_granted:
-        print("Permission granted!")
-    else:
-        # TODO: add message that says that request was denied
-        pass
-
-    # TODO: open a window and start receiving the juicy image bytes
 
 # Handles an incoming request to control self machine
-def handle_remote_connection(requester_code, requester_hostname, thread_name):
+# This function controls everything from the socket receiving a request packet, until the user presses accept or deny.
+# If deny is pressed, it is handled here.
+# If accept is pressed, another thread is called
+def handle_remote_connection(controller_code, controller_hostname, thread_name):
     # display a new request frame in the incoming requests using the two args
     # use the third arg to receive the event and flag objects from the main dictionary
     event, flag = remote_connection_thread_flags[thread_name]
-    incoming_requests_frame_obj.add_request_frame(requester_hostname, requester_code, event, flag)
+    incoming_requests_frame_obj.add_request_frame(controller_hostname,controller_code,event,flag)
     event.wait()
     if flag:
         print("You clicked yes!")
+        with MSS() as mss_obj:
+            while True:
+                screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, 1920, 1080)
+                screenshot_data = create_sendable_data(screenshot_bytes, "IMAGE",controller_code)
+                d_handler.insert_new_outgoing_message(screenshot_data)
     else:
-        print("You clicked no :(")
+        d_handler.insert_new_outgoing_message((create_sendable_data(b"","CONNECT_DENY",controller_code)))
+        del remote_connection_thread_flags[thread_name]
 
 
-    pass
+# Handles requesting control of another machine
+def handle_controlling_connection(remote_code):
+    if remote_code == self_code:
+        raise Exception("Self code was given") # TODO: make this part of the code not raise an error, but change a label in tkinter
+    # TODO: make sure that the same machine isn't receiving a request multiple times
+    event, flag = controlling_connection_thread_flags
+    outgoing_requests_frame_obj.add_request_frame("Unknown Hostname", remote_code)
+    with data_handler_lock:
+        d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_REQUEST",remote_code))
+    event.wait()
+    event.clear()
+    if flag:
+        print("Permission granted!")
+    else:
+        # TODO: add message that says that request was denied
+        print("denied")
+
+    # TODO: open a window and start receiving the juicy image bytes
+
+
+
+
 
 def on_main_close():
     global accept_data
@@ -459,8 +477,7 @@ class MainScreenConnectFrame(tk.Frame):
         self.columnconfigure(0, weight=1)
 
     def set_up_connection_thread(self):
-        global controlling_connection_thread
-        controlling_connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get(),))
+        controlling_connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get()))
         controlling_connection_thread.start()
 class MainScreenUtilitiesFrame(tk.Frame):
     def __init__(self, parent):
@@ -592,8 +609,6 @@ class UtilitiesIncomingRequestsFrame(tk.Frame):
         self.parent.on_frame_configure(None)
 
     def create_widgets(self):
-
-        self.bind_all('a', lambda event: self.add_request_frame(ri(1,100), ri(1,100), event))
         self.bind("<MouseWheel>",self.parent.on_mouse_wheel)  # Windows
         self.bind("<Button-4>",self.parent.on_mouse_wheel)  # Linux
         self.bind("<Button-5>",self.parent.on_mouse_wheel)  # Linux
@@ -619,7 +634,8 @@ class UtilitiesOutgoingRequestsFrame(tk.Frame):
         request_frame_row = separator_row + 1
         separator = SeparatorFrame(self,self.parent.winfo_reqwidth() / 2,"grey")
         separator.grid(row=separator_row,column=0)
-        request_frame = RequestFrame(parent=self,hostname_text=hostname_text,code_text=code_text,request_type="outgoing")
+        event, flag = controlling_connection_thread_flags
+        request_frame = RequestFrame(parent=self,hostname_text=hostname_text,code_text=code_text,request_type="outgoing", event=event, flag=flag)
         request_frame.grid(row=request_frame_row,column=0,sticky='ew',pady=5)
         self.request_frames.append(request_frame)
         self.separator_frames.append(separator)
@@ -643,7 +659,6 @@ class UtilitiesOutgoingRequestsFrame(tk.Frame):
         self.parent.on_frame_configure(None)
 
     def create_widgets(self):
-        self.bind_all('s',lambda event: self.add_request_frame(ri(1,100),ri(1,100),event))
         self.bind("<MouseWheel>",self.parent.on_mouse_wheel)  # Windows
         self.bind("<Button-4>",self.parent.on_mouse_wheel)  # Linux
         self.bind("<Button-5>",self.parent.on_mouse_wheel)  # Linux
@@ -675,9 +690,9 @@ class RequestFrame(ttk.Frame):
 
         match self.request_type:
             case "incoming":
-                accept_button = ttk.Button(self, text="Accept",style=apply_consolas_to_widget("Button", 12, "green"), command=lambda: [self.event.set(), self.flag.true()])
+                accept_button = ttk.Button(self, text="Accept",style=apply_consolas_to_widget("Button", 12, "green"), command=lambda: [self.event.set(), self.flag.true(), wm.open_launch_screen()])
                 # TODO: send the deny request packet from here, or call a function to do it
-                deny_button = ttk.Button(self,text="Deny",style=apply_consolas_to_widget("Button", 12, "red"),command=lambda: self.parent.remove_request_frame(self))
+                deny_button = ttk.Button(self,text="Deny",style=apply_consolas_to_widget("Button", 12, "red"),command=lambda: [self.event.set(), self.flag.false(), self.parent.remove_request_frame(self)])
                 accept_button.grid(row=0,column=1,padx=3,pady=3)
                 deny_button.grid(row=1,column=1,padx=3,pady=3)
                 widgets = [hostname_label,code_label,accept_button,deny_button]
@@ -744,7 +759,6 @@ class AnimatedGIF(tk.Label):
 
 if __name__ == "__main__":
     general_connection_thread = thr.Thread()
-    controlling_connection_thread = thr.Thread()
     track = thr.Thread(target=trackvar, daemon=True)
     track.start()
     d_handler = DataHandler()
