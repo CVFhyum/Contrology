@@ -8,7 +8,7 @@ import random as r
 from PIL import Image, ImageTk
 import socket
 from typing import Dict
-import threading as thr
+from mss.windows import MSS
 
 # With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
 def get_geometry_string(window_width: int, window_height: int) -> str:
@@ -111,3 +111,25 @@ class FlagObject:
 
     def __bool__(self):
         return self.flag
+
+# todo: don't hardcode the rect on the first screen.
+# todo: use screeninfo to find out the coordinate system and from that make a gui to choose monitors
+def send_continuous_screenshots(sock: socket.socket, code: str):
+    screen_width, screen_height = get_resolution_of_primary_monitor()
+    with MSS() as sct:
+        while True:
+            rect = {'top': 0,'left': 0,'width': screen_width,'height': screen_height}
+            new_screenshot = sct.grab(rect)
+            ss_bytes = new_screenshot.rgb
+            ready_data = create_sendable_data(ss_bytes, "IMAGE", code)
+            try:
+                sock.sendall(ready_data)
+            except Exception as e:
+                print(f"Something went wrong with the connection: {e}")
+                break
+
+def get_screenshot_bytes(mss_object: MSS, top, left, width, height):
+    rect = {'top': top,'left': left,'width': width,'height': height}
+    screenshot = mss_object.grab(rect)
+    screenshot_bytes = screenshot.rgb
+    return screenshot_bytes
