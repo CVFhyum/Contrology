@@ -214,13 +214,14 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
     event.wait()
     if flag:
         print("You clicked yes!")
+        d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_ACCEPT",controller_code))
         with MSS() as mss_obj:
             while True:
                 screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, 1920, 1080)
                 screenshot_data = create_sendable_data(screenshot_bytes, "IMAGE",controller_code)
                 d_handler.insert_new_outgoing_message(screenshot_data)
     else:
-        d_handler.insert_new_outgoing_message((create_sendable_data(b"","CONNECT_DENY",controller_code)))
+        d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_DENY",controller_code))
         del remote_connection_thread_flags[thread_name]
 
 
@@ -234,15 +235,15 @@ def handle_controlling_connection(remote_code):
     code_event, code_flag = code_flags
     event,flag = controlling_connection_thread_flags
     code_event.wait()
+    code_event.clear()
     if code_flag:
         outgoing_requests_frame_obj.add_request_frame("Unknown",remote_code)
         event.wait()
         event.clear()
+        ic(bool(flag))
         if flag:
             print("Permission granted!")
-            ic()
             wm.open_share_screen()
-            ic()
         else:
             connect_feedback_var.set("Request was denied.")
     else:
@@ -738,6 +739,16 @@ class RequestFrame(ttk.Frame):
         self.dimensions()
 
     def create_widgets(self):
+
+        def accept_connection():
+            self.flag.true()
+            self.event.set()
+
+        def deny_connection():
+            self.flag.false()
+            self.event.set()
+            self.parent.remove_request_frame(self)
+
         hostname_label = ttk.Label(self, text=self.hostname_text,font=consolas(12))
         code_label = ttk.Label(self,text=self.code_text,font=consolas(12))
 
@@ -746,8 +757,8 @@ class RequestFrame(ttk.Frame):
 
         match self.request_type:
             case "incoming":
-                accept_button = ttk.Button(self, text="Accept",style=apply_consolas_to_widget("Button", 12, "green"), command=lambda: [self.event.set(), self.flag.true()])
-                deny_button = ttk.Button(self,text="Deny",style=apply_consolas_to_widget("Button", 12, "red"),command=lambda: [self.event.set(), self.flag.false(), self.parent.remove_request_frame(self)])
+                accept_button = ttk.Button(self, text="Accept",style=apply_consolas_to_widget("Button", 12, "green"), command=accept_connection)
+                deny_button = ttk.Button(self,text="Deny",style=apply_consolas_to_widget("Button", 12, "red"),command=deny_connection)
                 accept_button.grid(row=0,column=1,padx=3,pady=3)
                 deny_button.grid(row=1,column=1,padx=3,pady=3)
                 widgets = [hostname_label,code_label,accept_button,deny_button]

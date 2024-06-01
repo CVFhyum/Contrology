@@ -20,6 +20,7 @@ from sql_handler import SQLHandler
 # When a socket raises an error, it should be immediately closed gracefully.
 # This function removes it from clients, client_ids, and closes it.
 def handle_sock_closing(closing_sock: socket.socket):
+    global client_ids
     clients.remove(closing_sock)
     for code, sock in client_ids.items():
         if sock is closing_sock:
