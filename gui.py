@@ -22,7 +22,9 @@ accept_data = True  # Flag that is disabled when the client is interrupted or qu
 connected = False  # Flag that documents if the client is currently connected to the socket.
 incoming_requests_frame_obj: Any = None
 outgoing_requests_frame_obj: Any = None
+connect_feedback_var: Optional[tk.StringVar] = None
 controlling_connection_thread_flags = thr.Event(), FlagObject(False)
+code_flags = thr.Event(), FlagObject(False)
 remote_connection_thread_flags = {}
 remote_thread_id = 0
 
@@ -47,6 +49,7 @@ class WindowManager:
         # Optional[tk.Tk] -> tk.Tk or None
         self._launch_screen_root: Optional[tk.Tk] = None
         self._main_screen_root: Optional[tk.Tk] = None
+        self._share_screen_root: Optional[tk.Tk] = None
 
     @property
     def launch_screen_root(self):
@@ -54,7 +57,7 @@ class WindowManager:
 
     @launch_screen_root.setter
     def launch_screen_root(self,value):
-        if value is not None and self._launch_screen_root is not None:
+        if value is not None and self.launch_screen_root is not None:
             raise ValueError("Launch Screen Root modify attempt failed")
         self._launch_screen_root = value
 
@@ -64,28 +67,56 @@ class WindowManager:
 
     @main_screen_root.setter
     def main_screen_root(self,value):
-        if value is not None and self._main_screen_root is not None:
+        if value is not None and self.main_screen_root is not None:
             raise ValueError("Main Screen Root modify attempt failed")
         self._main_screen_root = value
+
+    @property
+    def share_screen_root(self):
+        return self._share_screen_root
+
+    @share_screen_root.setter
+    def share_screen_root(self,value):
+        if value is not None and self.share_screen_root is not None:
+            raise ValueError("Share Screen Root modify attempt failed")
+        self._share_screen_root = value
 
     def open_launch_screen(self):
         if self.main_screen_root is not None:
             self.main_screen_root.destroy()
-            self.main_screen_root = None  # Clean-up
+            self.main_screen_root = None
+        if self.share_screen_root is not None:
+            self.share_screen_root.destroy()
+            self.share_screen_root = None
         self.launch_screen_root = LaunchScreen()
         self.launch_screen_root.mainloop()
 
     def open_main_screen(self):
         if self.launch_screen_root is not None:
             self.launch_screen_root.destroy()
-            self.launch_screen_root = None  # Clean-up
+            self.launch_screen_root = None
+        if self.share_screen_root is not None:
+            self.share_screen_root.destroy()
+            self.share_screen_root = None
         self.main_screen_root = MainScreen()
         self.main_screen_root.mainloop()
+
+    def open_share_screen(self):
+        if self.launch_screen_root is not None:
+            self.launch_screen_root.destroy()
+            self.launch_screen_root = None
+        if self.main_screen_root is not None:
+            self.main_screen_root.destroy()
+            self.main_screen_root = None
+        self.share_screen_root = ShareScreen()
+        self.share_screen_root.mainloop()
 
     def update_all(self):
         if self.launch_screen_root is not None:
             self.launch_screen_root.update()
         if self.main_screen_root is not None:
+            self.main_screen_root.update()
+        if self.share_screen_root is not None:
             self.main_screen_root.update()
 
     def close_all(self):
@@ -93,6 +124,8 @@ class WindowManager:
             self.launch_screen_root.destroy()
         if self.main_screen_root is not None:
             self.main_screen_root.destroy()
+        if self.share_screen_root is not None:
+            self.share_screen_root.destroy()
 
 
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
@@ -137,9 +170,17 @@ def handle_general_connection(c: socket.socket):
                                         event.set()
                                         flag.true()
                                     case "CONNECT_DENY":
-                                        event,flag = controlling_connection_thread_flags
+                                        event, flag = controlling_connection_thread_flags
                                         event.set()
                                         flag.false()
+                                    case "CODE_FOUND":
+                                        code_event, code_flag = code_flags
+                                        code_event.set()
+                                        code_flag.true()
+                                    case "CODE_NOT_FOUND":
+                                        code_event, code_flag = code_flags
+                                        code_event.set()
+                                        code_flag.false()
                                     case _:
                                         d_handler.insert_new_incoming_message((data_type, data))
                         else:
@@ -188,19 +229,28 @@ def handle_controlling_connection(remote_code):
     if remote_code == self_code:
         raise Exception("Self code was given") # TODO: make this part of the code not raise an error, but change a label in tkinter
     # TODO: make sure that the same machine isn't receiving a request multiple times
-    event, flag = controlling_connection_thread_flags
-    outgoing_requests_frame_obj.add_request_frame("Unknown Hostname", remote_code)
     with data_handler_lock:
         d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_REQUEST",remote_code))
-    event.wait()
-    event.clear()
-    if flag:
-        print("Permission granted!")
+    code_event, code_flag = code_flags
+    event,flag = controlling_connection_thread_flags
+    code_event.wait()
+    if code_flag:
+        outgoing_requests_frame_obj.add_request_frame("Unknown",remote_code)
+        event.wait()
+        event.clear()
+        if flag:
+            print("Permission granted!")
+            ic()
+            wm.open_share_screen()
+            ic()
+        else:
+            connect_feedback_var.set("Request was denied.")
     else:
-        # TODO: add message that says that request was denied
-        print("denied")
+        # TODO:  display code not found in tkinter
+        connect_feedback_var.set("Code not found.")
+    sleep(2)
+    connect_feedback_var.set("")
 
-    # TODO: open a window and start receiving the juicy image bytes
 
 
 
@@ -453,11 +503,14 @@ class MainScreenInfoFrame(tk.Frame):
         self.grid_propagate(False)
 class MainScreenConnectFrame(tk.Frame):
     def __init__(self, parent):
+        global connect_feedback_var
         super().__init__(parent)
         self.grid(row=1, column=0)  # change
         self.configure(width=parent.width,height=parent.height*0.4)  # change
         self.configure(highlightthickness=1,highlightbackground='green')  # debug view
         self.connect_code_var = tk.StringVar()
+        self.feedback_var = tk.StringVar()
+        connect_feedback_var = self.feedback_var
 
         self.create_widgets()
         self.dimensions()
@@ -466,10 +519,12 @@ class MainScreenConnectFrame(tk.Frame):
         connect_label = ttk.Label(self, text="Connect to a remote machine", font=consolas(32))
         connect_code_entry = ttk.Entry(self, textvariable=self.connect_code_var, font=consolas(32),width=10)
         connect_button = ttk.Button(self, text="->",style=apply_consolas_to_widget('Button', 32),width=2,command=self.set_up_connection_thread)
+        feedback_label = ttk.Label(self, textvariable=self.feedback_var, font=consolas(16), foreground='red')
 
         connect_label.grid(row=0,column=0,sticky='s')
         connect_code_entry.grid(row=1,column=0,sticky='')
         connect_button.grid(row=2,column=0,sticky='n')
+        feedback_label.grid(row=3,column=0,sticky='s')
 
     def dimensions(self):
         self.grid_propagate(False)
@@ -477,7 +532,7 @@ class MainScreenConnectFrame(tk.Frame):
         self.columnconfigure(0, weight=1)
 
     def set_up_connection_thread(self):
-        controlling_connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get()))
+        controlling_connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get(),))
         controlling_connection_thread.start()
 class MainScreenUtilitiesFrame(tk.Frame):
     def __init__(self, parent):
@@ -622,6 +677,7 @@ class UtilitiesOutgoingRequestsFrame(tk.Frame):
         self.parent = parent
         self.grid(row=0,column=0)  # change
         # self.configure(width=parent.winfo_reqwidth(), height=parent.winfo_reqheight())
+        self.configure(highlightthickness=1, highlightcolor='green')
 
         self.request_frames = []
         self.separator_frames: list[tk.Frame] = []
@@ -690,8 +746,7 @@ class RequestFrame(ttk.Frame):
 
         match self.request_type:
             case "incoming":
-                accept_button = ttk.Button(self, text="Accept",style=apply_consolas_to_widget("Button", 12, "green"), command=lambda: [self.event.set(), self.flag.true(), wm.open_launch_screen()])
-                # TODO: send the deny request packet from here, or call a function to do it
+                accept_button = ttk.Button(self, text="Accept",style=apply_consolas_to_widget("Button", 12, "green"), command=lambda: [self.event.set(), self.flag.true()])
                 deny_button = ttk.Button(self,text="Deny",style=apply_consolas_to_widget("Button", 12, "red"),command=lambda: [self.event.set(), self.flag.false(), self.parent.remove_request_frame(self)])
                 accept_button.grid(row=0,column=1,padx=3,pady=3)
                 deny_button.grid(row=1,column=1,padx=3,pady=3)
@@ -699,8 +754,8 @@ class RequestFrame(ttk.Frame):
             case "outgoing":
                 waiting_label = ttk.Label(self, text="Waiting...",font=consolas(10))
                 loading_gif_label = AnimatedGIF(self,"assets/loading.gif",size=(25,25))
-                waiting_label.grid(row=0,column=1)
-                loading_gif_label.grid(row=1,column=1)
+                waiting_label.grid(row=0,column=1,padx=3,pady=3,sticky='e')
+                loading_gif_label.grid(row=1,column=1,padx=3,pady=3,sticky='e')
                 widgets = [hostname_label,code_label,waiting_label,loading_gif_label]
             case _:
                 raise Exception("Invalid request type (not incoming/outgoing)")
@@ -715,8 +770,8 @@ class RequestFrame(ttk.Frame):
         self.bind("<Button-5>",self.parent.parent.on_mouse_wheel)  # Linux
 
     def dimensions(self):
-        self.rowconfigure((0,1), weight=1)
-        self.columnconfigure(0, weight=1)
+        self.grid_rowconfigure((0,1), weight=1)
+        self.grid_columnconfigure(0, weight=1)
         self.grid_propagate(False)
 
 # Frame that acts as a separator between RequestFrame's/
@@ -755,6 +810,29 @@ class AnimatedGIF(tk.Label):
         self.configure(image=self.frames[self.current_frame])
         self.current_frame = (self.current_frame + 1) % len(self.frames)
         self.after(100, self.update_animation)
+
+
+class ShareScreen(tk.Tk):
+    def __init__(self):
+        # Simple configuration and variable loading
+        super().__init__()
+        self.title("Share - Contrology")
+
+        # Complex configuration
+        screen_width, screen_height = get_resolution_of_primary_monitor()
+        self.geometry(f"{screen_width}x{screen_height}")
+        self.attributes('-fullscreen', True)
+        # self.resizable(False, False) # todo: removed for debug
+        self.protocol("WM_DELETE_WINDOW",on_main_close) # todo: consider changing to opening the main screen again
+
+        # Widgets
+        pass
+
+        # Functions
+        self.dimensions()
+
+    def dimensions(self):
+        pass
 
 
 if __name__ == "__main__":

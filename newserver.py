@@ -47,6 +47,9 @@ def handle_client(sock: socket.socket):
             code = get_code_from_sock(client_ids, sock) # get code from socket object
             data = create_sendable_data(b"", "CODE_NOT_FOUND", code)
         else:
+            sender_code = get_code_from_sock(client_ids, sock)
+            m_handler.update(sender_code,create_sendable_data(b"","CODE_FOUND", sender_code))
+
             match data_type:
                 case "CONNECT_REQUEST":
                     # The data should be {code}{hostname} (both of the controller so the remote knows)

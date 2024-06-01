@@ -112,6 +112,9 @@ class FlagObject:
     def __bool__(self):
         return self.flag
 
+    def __repr__(self):
+        return f"{self.flag}"
+
 # todo: don't hardcode the rect on the first screen.
 # todo: use screeninfo to find out the coordinate system and from that make a gui to choose monitors
 def send_continuous_screenshots(sock: socket.socket, code: str):
