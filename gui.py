@@ -218,9 +218,13 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
     event, flag = remote_connection_thread_flags[thread_name]
     incoming_requests_frame_obj.add_request_frame(controller_hostname,controller_code,event,flag)
     event.wait()
+    ic()
     if flag:
+        ic()
         my_remote_info = Remote(socket.gethostname(), self_code, SCREEN_WIDTH, SCREEN_HEIGHT)
+        ic(my_remote_info)
         info_bytes = pickle.dumps(my_remote_info)
+        ic(info_bytes)
         d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code,pickled=True))
         with MSS() as mss_obj:
             while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.

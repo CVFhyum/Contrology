@@ -41,9 +41,7 @@ def recvall(sock: socket.socket, length: int) -> bytes:
 
 # Takes care of attaching a header and compressing the data
 def create_sendable_data(data: bytes, data_type: str, recipient_code: str, pickled=False) -> bytes:
-    if pickled:
-        data = pickle.dumps(data)
-    else:
+    if not pickled:
         if len(data) != 0:
             data = zlib.compress(data, zlib.Z_DEFAULT_COMPRESSION)
     data_header = Header(len(data), data_type, recipient_code)
@@ -68,6 +66,7 @@ def parse_raw_data(data: bytes, pickled=False) -> str:
     if pickled:
         return pickle.loads(data)
     if len(data) != 0:
+        ic(f"decomp", data)
         data = zlib.decompress(data)
     return data.decode('utf-8', 'ignore')
 

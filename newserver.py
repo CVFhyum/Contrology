@@ -37,7 +37,10 @@ def handle_client(sock: socket.socket):
         header = sock.recv(HEADER_LENGTH)  # Receive the header
         data_length, data_type, code = parse_header(header)  # Parse the header
         data = recvall(sock,data_length)  # Receive all the data
-        data = parse_raw_data(data)  # Parse the data
+        if data_type == "CONNECT_ACCEPT":
+            data = parse_raw_data(data, pickled=True)  # Parse the data
+        else:
+            data = parse_raw_data(data)
         ic(len(data), data_length)
         ic(data_type, code)
         # TODO: handle messages that are meant for the server
