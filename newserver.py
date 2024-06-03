@@ -39,6 +39,8 @@ def handle_client(sock: socket.socket):
         data = recvall(sock,data_length)  # Receive all the data
         if data_type == "CONNECT_ACCEPT":
             data = parse_raw_data(data, pickled=True)  # Parse the data
+        elif data_type == "IMAGE":
+            data = parse_raw_data(data, image=True)
         else:
             data = parse_raw_data(data)
         ic(len(data), data_length)
@@ -64,6 +66,8 @@ def handle_client(sock: socket.socket):
                 case "CONNECT_ACCEPT":  # Remote --> Controller
                     data = pickle.dumps(data)
                     data = create_sendable_data(data, data_type, code, pickled=True)
+                case "IMAGE":
+                    data = create_sendable_data(data, data_type, code)
                 case _:
                     data = data.encode('utf-8')  # Encode the data
                     data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent

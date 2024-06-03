@@ -62,11 +62,13 @@ def parse_header(header: bytes) -> tuple[int, str, str]:
 
 
 # Takes care of decompressing, depickling, and decoding the data
-def parse_raw_data(data: bytes, pickled=False) -> str:
+def parse_raw_data(data: bytes, pickled=False, image=False) -> Union[str, bytes]:
     if pickled:
         return pickle.loads(data)
     if len(data) != 0:
         data = zlib.decompress(data)
+    if image:
+        return data
     return data.decode('utf-8', 'ignore')
 
 # Get the time in the form of HH:MM:SS (Example: 14:37:06)

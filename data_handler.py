@@ -28,6 +28,9 @@ class DataHandler:
             raise Exception("No incoming messages are in the queue.")
         return self.incoming_data_queue.pop(0)
 
+    def get_last_image(self):
+        return self.last_image_received
+
     def send_all_outgoing_data(self, sock: socket.socket):
         for outgoing_data in self.outgoing_data_queue:
             try:

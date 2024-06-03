@@ -152,6 +152,8 @@ def handle_general_connection(c: socket.socket):
                         data = recvall(c,data_length)
                         if data_type == "CONNECT_ACCEPT":
                             data = parse_raw_data(data, pickled=True)
+                        elif data_type == "IMAGE":
+                            data = parse_raw_data(data, image=True)
                         else:
                             data = parse_raw_data(data)
                         if code == self_code or code == ALL_CODE:
@@ -180,6 +182,9 @@ def handle_general_connection(c: socket.socket):
                                         code_event, code_flag = code_flags
                                         code_event.set()
                                         code_flag.false()
+                                    case "IMAGE":
+                                        data.encode('utf-8')
+                                        d_handler.set_last_image(data)
                                     case _:
                                         d_handler.insert_new_incoming_message((data_type, data))
                         else:
@@ -243,13 +248,12 @@ def handle_controlling_connection(remote_code):
             event.wait()
             event.clear()
             if flag:
-                print("Permission granted!")
                 current_remote.code = remote_code
                 current_request_frame.switch_to_connect_button()
             else:
                 temp_message_setter(new_text="Request was denied.")
+                outgoing_requests_frame_obj.remove_request_frame(current_request_frame)
         else:
-            # TODO:  display code not found in tkinter
             temp_message_setter(new_text="Code not found.")
 
 
@@ -856,12 +860,12 @@ class ShareScreen(tk.Tk):
         self.protocol("WM_DELETE_WINDOW",on_main_close) # todo: consider changing to opening the main screen again
 
         # Widgets
-        info_frame_height = 50
-        canvas_height = screen_width - info_frame_height
+        info_frame_height = 80
+        canvas_height = screen_height - info_frame_height
         self.info_frame = ShareScreenInfoFrame(self, info_frame_height, self.remote)
-        self.info_frame.grid(row=0,column=0)
+        self.info_frame.pack(side="top",fill="x")
         self.canvas_frame = ShareScreenCanvasFrame(self, canvas_height, self.remote)
-        self.canvas_frame.grid(row=1,column=0)
+        self.canvas_frame.pack(fill="both", expand=True)
 
         # Functions
         self.dimensions()
@@ -873,16 +877,16 @@ class ShareScreenInfoFrame(tk.Frame):
     def __init__(self, parent, height: int, remote: Remote):
         super().__init__(parent)
         self.parent = parent
-        self.configure(height=height, width=self.parent.winfo_reqwidth())
+        self.configure(height=height, width=SCREEN_WIDTH)
         self.remote = remote
 
         self.dimensions()
         self.create_widgets()
 
     def create_widgets(self):
-        now_controlling_label = ttk.Label(text="Now controlling", font=consolas(10))
-        hostname_label = ttk.Label(text=self.remote.hostname, font=consolas(12))
-        code_label = ttk.Label(text=self.remote.code, font=consolas(12))
+        now_controlling_label = ttk.Label(self, text="Now controlling", font=consolas(10))
+        hostname_label = ttk.Label(self, text=self.remote.hostname, font=consolas(12))
+        code_label = ttk.Label(self, text=self.remote.code, font=consolas(12))
 
         now_controlling_label.grid(row=0,column=0)
         hostname_label.grid(row=1, column=0)
@@ -891,7 +895,7 @@ class ShareScreenInfoFrame(tk.Frame):
     def dimensions(self):
         self.grid_rowconfigure((0,1,2), weight=1)
 
-class ShareScreenCanvasFrame(tk.Frame):
+class ShareScreenCanvasFrame(ttk.Frame):
     def __init__(self, parent, height: int, remote: Remote):
         super().__init__(parent)
         self.parent = parent
@@ -899,27 +903,40 @@ class ShareScreenCanvasFrame(tk.Frame):
         self.height = height
         self.width = SCREEN_WIDTH
         self.configure(height=self.height, width=self.width)
-        self.canvas = None
+
+        self.canvas: Optional[tk.Canvas] = None
         self.canvas_image_id = None
-        self.scale_factor = min(self.width / remote.res_width, self.height / remote.res_height)
+        self.default_image = None
+        self.display_image = None
+        self.scale_factor = min(self.width / remote.res_width,self.height / remote.res_height)
+        self.resized_width = int(self.remote.res_width * self.scale_factor)
+        self.resized_height = int(self.remote.res_width * self.scale_factor)
 
         self.dimensions()
         self.create_widgets()
 
+        self.update_image_thread = thr.Thread(target=self.load_latest_image)
+        self.update_image_thread.start()
 
     def create_widgets(self):
-        self.canvas = tk.Canvas(self, bg="green")
-        self.canvas.pack(fill="both", expand=True)
-        default_image = Image.new('RGB', (self.remote.res_width, self.remote.res_height), (0, 0, 0))
-        new_width, new_height = int(self.remote.res_width * self.scale_factor), int(self.remote.res_height * self.scale_factor)
-        default_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        self.canvas_image_id = self.canvas.create_image(self.width//2, self.height//2, anchor="center", image=default_image)
+        self.canvas = tk.Canvas(self, bg="black", width=self.width, height=self.height)
+        self.canvas.pack(fill=tk.BOTH,expand=True)
+        default_image = Image.new('RGB', (self.remote.res_width, self.remote.res_height), (0,0,0))
+        default_image.resize((self.resized_width, self.resized_height), Image.Resampling.LANCZOS)
+        self.default_image = ImageTk.PhotoImage(default_image)
+        self.canvas_image_id = self.canvas.create_image(self.width // 2,self.height // 2,anchor="center",image=self.default_image)
 
     def dimensions(self):
-        self.grid_propagate(False)
+        pass
 
     def load_latest_image(self):
-        pass
+        while True:
+            with data_handler_lock:
+                self.display_image = d_handler.get_last_image()
+            self.display_image = Image.frombytes("RGB", (self.remote.res_width, self.remote.res_height), self.display_image)
+            self.display_image = self.display_image.resize((self.resized_width, self.resized_height),Image.Resampling.LANCZOS)
+            self.display_image = ImageTk.PhotoImage(self.display_image)
+            self.canvas.itemconfig(self.canvas_image_id, image=self.display_image)
 
 if __name__ == "__main__":
     general_connection_thread = thr.Thread()
