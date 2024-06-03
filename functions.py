@@ -66,7 +66,6 @@ def parse_raw_data(data: bytes, pickled=False) -> str:
     if pickled:
         return pickle.loads(data)
     if len(data) != 0:
-        ic(f"decomp", data)
         data = zlib.decompress(data)
     return data.decode('utf-8', 'ignore')
 

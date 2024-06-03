@@ -150,9 +150,6 @@ def handle_general_connection(c: socket.socket):
                     if header:
                         data_length, data_type, code = parse_header(header)
                         data = recvall(c,data_length)
-                        ic(data_type)
-                        if data_type != "IMAGE":
-                            ic(data)
                         if data_type == "CONNECT_ACCEPT":
                             data = parse_raw_data(data, pickled=True)
                         else:
@@ -170,11 +167,7 @@ def handle_general_connection(c: socket.socket):
                                         event, flag = controlling_connection_thread_flags
                                         event.set()
                                         flag.true()
-                                        ic(data)
-                                        ic(isinstance(data, Remote))
-                                        ic(type(data))
                                         current_remote.copy_from(data)
-                                        ic(current_remote)
                                     case "CONNECT_DENY":
                                         event, flag = controlling_connection_thread_flags
                                         event.set()
@@ -218,13 +211,9 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
     event, flag = remote_connection_thread_flags[thread_name]
     incoming_requests_frame_obj.add_request_frame(controller_hostname,controller_code,event,flag)
     event.wait()
-    ic()
     if flag:
-        ic()
         my_remote_info = Remote(socket.gethostname(), self_code, SCREEN_WIDTH, SCREEN_HEIGHT)
-        ic(my_remote_info)
         info_bytes = pickle.dumps(my_remote_info)
-        ic(info_bytes)
         d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code,pickled=True))
         with MSS() as mss_obj:
             while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.
@@ -619,7 +608,6 @@ class ScrollableCanvasWidget(tk.Canvas):
         self.configure(scrollregion=self.bbox("all"))
 
     def on_mouse_wheel(self,event):
-        ic()
         # For Windows and macOS
         if event.delta:
             self.yview_scroll(int(-1 * (event.delta / 120)),"units")
