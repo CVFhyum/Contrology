@@ -211,7 +211,9 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
     event.wait()
     if flag:
         my_remote_info = Remote(socket.gethostname(),self_code,get_resolution_of_primary_monitor())
+        ic(my_remote_info)
         info_bytes = pickle.dumps(my_remote_info)
+        ic(info_bytes)
         d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code))
         with MSS() as mss_obj:
             while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.

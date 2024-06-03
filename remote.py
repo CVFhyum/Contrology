@@ -44,3 +44,6 @@ class Remote:
             self.res_width = other.res_width
             self.res_height = other.res_height
 
+    def __repr__(self):
+        return f"{self.hostname}, {self.code}, {self.res_width}, {self.res_height}"
+
