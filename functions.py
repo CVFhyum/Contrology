@@ -40,9 +40,12 @@ def recvall(sock: socket.socket, length: int) -> bytes:
     return buffer
 
 # Takes care of attaching a header and compressing the data
-def create_sendable_data(data: bytes, data_type: str, recipient_code: str) -> bytes:
-    if len(data) != 0:
-        data = zlib.compress(data, zlib.Z_DEFAULT_COMPRESSION)
+def create_sendable_data(data: bytes, data_type: str, recipient_code: str, pickled=False) -> bytes:
+    if pickled:
+        data = pickle.dumps(data)
+    else:
+        if len(data) != 0:
+            data = zlib.compress(data, zlib.Z_DEFAULT_COMPRESSION)
     data_header = Header(len(data), data_type, recipient_code)
     return data_header.get_header_bytes() + data
 
@@ -62,10 +65,10 @@ def parse_header(header: bytes) -> tuple[int, str, str]:
 
 # Takes care of decompressing, depickling, and decoding the data
 def parse_raw_data(data: bytes, pickled=False) -> str:
-    if len(data) != 0:
-        data = zlib.decompress(data)
     if pickled:
         return pickle.loads(data)
+    if len(data) != 0:
+        data = zlib.decompress(data)
     return data.decode('utf-8', 'ignore')
 
 # Get the time in the form of HH:MM:SS (Example: 14:37:06)

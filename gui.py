@@ -150,7 +150,13 @@ def handle_general_connection(c: socket.socket):
                     if header:
                         data_length, data_type, code = parse_header(header)
                         data = recvall(c,data_length)
-                        data = parse_raw_data(data, pickled=True if data_type == "CONNECT_ACCEPT" else False)
+                        ic(data_type)
+                        if data_type != "IMAGE":
+                            ic(data)
+                        if data_type == "CONNECT_ACCEPT":
+                            data = parse_raw_data(data, pickled=True)
+                        else:
+                            data = parse_raw_data(data)
                         if code == self_code or code == ALL_CODE:
                             with data_handler_lock: # todo: change this lock to only use it while actually editing
                                 match data_type:
@@ -164,6 +170,9 @@ def handle_general_connection(c: socket.socket):
                                         event, flag = controlling_connection_thread_flags
                                         event.set()
                                         flag.true()
+                                        ic(data)
+                                        ic(isinstance(data, Remote))
+                                        ic(type(data))
                                         current_remote.copy_from(data)
                                         ic(current_remote)
                                     case "CONNECT_DENY":
@@ -212,7 +221,7 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
     if flag:
         my_remote_info = Remote(socket.gethostname(), self_code, SCREEN_WIDTH, SCREEN_HEIGHT)
         info_bytes = pickle.dumps(my_remote_info)
-        d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code))
+        d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code,pickled=True))
         with MSS() as mss_obj:
             while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.
                 screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, 1920, 1080)
