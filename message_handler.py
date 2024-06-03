@@ -37,7 +37,10 @@ class MessageHandler:
             elif client_code == SERVER_CODE:
                 raise Exception("Message with recipient as server had a sent attempt - this message was not received properly by the server")
             else:
-                client_ids[client_code].sendall(data_to_send)
+                try:
+                    client_ids[client_code].sendall(data_to_send)
+                except Exception as e:
+                    print(f"Error sending data to socket: {e}") # todo: remove this and handle the socket closing properly
         self.message_queue = {}
 
 

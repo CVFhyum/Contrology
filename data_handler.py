@@ -7,22 +7,21 @@ from icecream import ic
 class DataHandler:
     def __init__(self):
         # Incoming data queue -> Tuples of data -> (data type, data)
-        # Incoming connection requests -> Tuples of data (code of requester, hostname of requester)
         # Outgoing data queue -> Ready data (with headers)
         self.incoming_data_queue: list = []
-        self.incoming_connection_requests = []
         self.outgoing_data_queue: list = []
+        self.last_image_received = None
 
     # Insert data as a tuple (data type, data)
     def insert_new_incoming_message(self, data: tuple[str, str]):
         self.incoming_data_queue.append(data)
 
-    def insert_new_connection_request(self, data: tuple[str]):
-        self.incoming_connection_requests.append(data)
-
     # Insert data as "ready data" (with a header)
     def insert_new_outgoing_message(self, data: bytes):
         self.outgoing_data_queue.append(data)
+
+    def set_last_image(self, image: bytes):
+        self.last_image_received = image
 
     def get_most_recent_message(self):
         if len(self.incoming_data_queue) == 0:

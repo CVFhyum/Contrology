@@ -1,3 +1,4 @@
+import tkinter as tk
 import zlib
 import screeninfo
 from header import Header
@@ -7,8 +8,11 @@ from icecream import ic
 import random as r
 from PIL import Image, ImageTk
 import socket
-from typing import Dict
+from typing import Dict, Union
 from mss.windows import MSS
+import threading as thr
+from time import sleep
+import pickle
 
 # With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
 def get_geometry_string(window_width: int, window_height: int) -> str:
@@ -56,10 +60,12 @@ def parse_header(header: bytes) -> tuple[int, str, str]:
     return data_length, data_type, recipient_code
 
 
-# Takes care of decompressing and decoding the data
-def parse_raw_data(data: bytes) -> str:
+# Takes care of decompressing, depickling, and decoding the data
+def parse_raw_data(data: bytes, pickled=False) -> str:
     if len(data) != 0:
         data = zlib.decompress(data)
+    if pickled:
+        return pickle.loads(data)
     return data.decode('utf-8', 'ignore')
 
 # Get the time in the form of HH:MM:SS (Example: 14:37:06)
@@ -75,7 +81,7 @@ def generate_alphanumeric_code(existing_client_ids: Dict[str, socket.socket]) ->
         code = "".join([r.choice(CODE_CHARACTER_POOL) for x in range(RECIPIENT_HEADER_LENGTH)])
     return code
 
-def get_resized_image(image_path: str, size: tuple[int, int]) -> ImageTk.PhotoImage:
+def get_resized_image(image_path: str, size: Union[tuple[int,int], int]) -> ImageTk.PhotoImage:
     img = Image.open(image_path)
     if size >= 1:
         new_width, new_height = size[0], size[1]
@@ -136,3 +142,13 @@ def get_screenshot_bytes(mss_object: MSS, top, left, width, height):
     screenshot = mss_object.grab(rect)
     screenshot_bytes = screenshot.rgb
     return screenshot_bytes
+
+# This function takes a StringVar, changes it to new_text, then waits wait_seconds, before changing it back to old_text.
+def set_temporary_message(var: tk.StringVar, old_text: str, new_text: str, wait_seconds: float):
+    if thr.current_thread() is thr.main_thread():
+        thr.Thread(target=set_temporary_message, args=(var, new_text, wait_seconds, old_text)).start()
+    else:
+        var.set(new_text)
+        sleep(wait_seconds)
+        var.set(old_text)
+

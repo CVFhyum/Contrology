@@ -2,9 +2,10 @@ from functions import *
 from constants import *
 from configuration import *
 from data_handler import DataHandler
+from remote import Remote
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from PIL import Image, ImageTk, ImageSequence
 import socket
 import threading as thr
@@ -14,22 +15,22 @@ from pyperclip import copy as cc_copy
 from time import sleep
 from random import randint as ri
 from mss.windows import MSS
+from functools import partial
 
 # Global variables that can be accessed all throughout the code
+SCREEN_WIDTH, SCREEN_HEIGHT = get_resolution_of_primary_monitor()
 self_code = ""  # This client's code
 data_handler_lock = thr.Lock()  # Lock to prevent race conditions on the DataHandler obj
 accept_data = True  # Flag that is disabled when the client is interrupted or quits. This will make sure that necessary information-receiving threads are stopped.
 connected = False  # Flag that documents if the client is currently connected to the socket.
-incoming_requests_frame_obj: Any = None
-outgoing_requests_frame_obj: Any = None
-connect_feedback_var: Optional[tk.StringVar] = None
-controlling_connection_thread_flags = thr.Event(), FlagObject(False)
+incoming_requests_frame_obj: Any = None  # The frame object of incoming requests, so it can be edited in the global scope.
+outgoing_requests_frame_obj: Any = None  # The frame object of outgoing requests, so it can be edited in the global scope.
+connect_feedback_var: Optional[tk.StringVar] = None  # StringVar of the feedback label in the connect screen
+controlling_connection_thread_flags = thr.Event(), FlagObject(False)  #
 code_flags = thr.Event(), FlagObject(False)
 remote_connection_thread_flags = {}
 remote_thread_id = 0
 
-wait_for_connection_response = thr.Event()
-control_permission_granted = False  # Flag that signifies permission to control a remote.
 
 def trackvar():
     while accept_data:
@@ -108,7 +109,7 @@ class WindowManager:
         if self.main_screen_root is not None:
             self.main_screen_root.destroy()
             self.main_screen_root = None
-        self.share_screen_root = ShareScreen()
+        self.share_screen_root = ShareScreen(current_remote)
         self.share_screen_root.mainloop()
 
     def update_all(self):
@@ -125,13 +126,14 @@ class WindowManager:
         if self.main_screen_root is not None:
             self.main_screen_root.destroy()
         if self.share_screen_root is not None:
+            ic()
             self.share_screen_root.destroy()
 
 
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
 # This thread takes care of receiving incoming data from the server and loading it into incoming_data
 def handle_general_connection(c: socket.socket):
-    global self_code, connected, accept_data, control_permission_granted, remote_thread_id
+    global self_code, connected, accept_data, remote_thread_id
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
     ic(self_code)
     # If the initialisation header that was sent by the server has extra data, raise this error
@@ -148,9 +150,10 @@ def handle_general_connection(c: socket.socket):
                     header = c.recv(HEADER_LENGTH)
                     if header:
                         data_length, data_type, code = parse_header(header)
-                        data = parse_raw_data(recvall(c,data_length))
+                        data = recvall(c,data_length)
+                        data = parse_raw_data(data, pickled=True if data_type == "CONNECT_ACCEPT" else False)
                         if code == self_code or code == ALL_CODE:
-                            with data_handler_lock:
+                            with data_handler_lock: # todo: change this lock to only use it while actually editing
                                 match data_type:
                                     case "CONNECT_REQUEST":
                                         requester_code, requester_hostname = data[:RECIPIENT_HEADER_LENGTH], data[RECIPIENT_HEADER_LENGTH:]
@@ -158,17 +161,11 @@ def handle_general_connection(c: socket.socket):
                                         remote_connection_thread_flags.update({remote_thread_id: (thr.Event(),FlagObject(False))})
                                         remote_connection_thread.start()
                                         remote_thread_id += 1
-                                        # TODO: instantly accepting if a request is sent currently, handle that here.
-                                        # permission_granted = True
-                                        # if permission_granted:
-                                        #     d_handler.insert_new_outgoing_message((create_sendable_data(b"", "CONNECT_ACCEPT", requester_code)))
-                                        # else:
-                                        #     d_handler.insert_new_outgoing_message((create_sendable_data(b"","CONNECT_DENY",requester_code)))
-                                        # d_handler.insert_new_incoming_message((data_type, data)) # TODO: change this if decide to use connec requests attr in dhandler
                                     case "CONNECT_ACCEPT":
                                         event, flag = controlling_connection_thread_flags
                                         event.set()
                                         flag.true()
+                                        current_remote.copy_from(data)
                                     case "CONNECT_DENY":
                                         event, flag = controlling_connection_thread_flags
                                         event.set()
@@ -213,10 +210,11 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
     incoming_requests_frame_obj.add_request_frame(controller_hostname,controller_code,event,flag)
     event.wait()
     if flag:
-        print("You clicked yes!")
-        d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_ACCEPT",controller_code))
+        my_remote_info = Remote(socket.gethostname(),self_code,get_resolution_of_primary_monitor())
+        info_bytes = pickle.dumps(my_remote_info)
+        d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code))
         with MSS() as mss_obj:
-            while True:
+            while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.
                 screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, 1920, 1080)
                 screenshot_data = create_sendable_data(screenshot_bytes, "IMAGE",controller_code)
                 d_handler.insert_new_outgoing_message(screenshot_data)
@@ -227,34 +225,30 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
 
 # Handles requesting control of another machine
 def handle_controlling_connection(remote_code):
+    temp_message_setter = partial(set_temporary_message, var=connect_feedback_var, old_text="", wait_seconds=2)
     if remote_code == self_code:
-        raise Exception("Self code was given") # TODO: make this part of the code not raise an error, but change a label in tkinter
-    # TODO: make sure that the same machine isn't receiving a request multiple times
-    with data_handler_lock:
-        d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_REQUEST",remote_code))
-    code_event, code_flag = code_flags
-    event,flag = controlling_connection_thread_flags
-    code_event.wait()
-    code_event.clear()
-    if code_flag:
-        outgoing_requests_frame_obj.add_request_frame("Unknown",remote_code)
-        event.wait()
-        event.clear()
-        ic(bool(flag))
-        if flag:
-            print("Permission granted!")
-            wm.open_share_screen()
-        else:
-            connect_feedback_var.set("Request was denied.")
+        temp_message_setter(new_text="You cannot give your own code!")
     else:
-        # TODO:  display code not found in tkinter
-        connect_feedback_var.set("Code not found.")
-    sleep(2)
-    connect_feedback_var.set("")
-
-
-
-
+        # TODO: make sure that the same machine isn't receiving a request multiple times
+        with data_handler_lock:
+            d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_REQUEST",remote_code))
+        code_event, code_flag = code_flags
+        event,flag = controlling_connection_thread_flags
+        code_event.wait()
+        code_event.clear()
+        if code_flag:
+            current_request_frame: RequestFrame = outgoing_requests_frame_obj.add_request_frame("Unknown",remote_code)
+            event.wait()
+            event.clear()
+            if flag:
+                print("Permission granted!")
+                current_remote.code = remote_code
+                current_request_frame.switch_to_connect_button()
+            else:
+                temp_message_setter(new_text="Request was denied.")
+        else:
+            # TODO:  display code not found in tkinter
+            temp_message_setter(new_text="Code not found.")
 
 
 def on_main_close():
@@ -383,7 +377,7 @@ class LaunchScreenButtonsFrame(tk.Frame):
                 admin_password_entry.configure(style='grey.TEntry',show='')
                 self.admin_password_entry_var.set("Enter password...")
 
-        # When Enter is pressed while the password entry has focus, this callback is invoked. It verifies the password and TODO: tells the wm to open the admin screen.
+        # When Enter is pressed while the password entry has focus, this callback is invoked. It verifies the password and TODO: tells the w_manager to open the admin screen.
         def admin_password_entry_handle_enter(_=None):
             # todo: handle the entered password (verify it)
             print(self.admin_password_entry_var.get())
@@ -627,7 +621,6 @@ class UtilitiesIncomingRequestsFrame(tk.Frame):
         super().__init__(parent)
         self.parent = parent
         self.grid(row=0, column=0) # change
-        # self.configure(width=parent.winfo_reqwidth(), height=parent.winfo_reqheight())
         self.configure(highlightthickness=0)
 
         self.request_frames = []
@@ -678,7 +671,7 @@ class UtilitiesOutgoingRequestsFrame(tk.Frame):
         self.parent = parent
         self.grid(row=0,column=0)  # change
         # self.configure(width=parent.winfo_reqwidth(), height=parent.winfo_reqheight())
-        self.configure(highlightthickness=1, highlightcolor='green')
+        self.configure(highlightthickness=0)
 
         self.request_frames = []
         self.separator_frames: list[tk.Frame] = []
@@ -697,6 +690,7 @@ class UtilitiesOutgoingRequestsFrame(tk.Frame):
         self.request_frames.append(request_frame)
         self.separator_frames.append(separator)
         self.parent.on_frame_configure(None)
+        return request_frame
 
     def remove_request_frame(self,request_frame):
         request_frame_index = self.request_frames.index(request_frame)
@@ -734,12 +728,14 @@ class RequestFrame(ttk.Frame):
         self.request_type = request_type
         self.event = event
         self.flag = flag
+        self.waiting_label = None
+        self.loading_gif_label = None
+        self.connect_button = None
 
-        self.create_widgets()
         self.dimensions()
+        self.create_widgets()
 
     def create_widgets(self):
-
         def accept_connection():
             self.flag.true()
             self.event.set()
@@ -763,11 +759,14 @@ class RequestFrame(ttk.Frame):
                 deny_button.grid(row=1,column=1,padx=3,pady=3)
                 widgets = [hostname_label,code_label,accept_button,deny_button]
             case "outgoing":
-                waiting_label = ttk.Label(self, text="Waiting...",font=consolas(10))
-                loading_gif_label = AnimatedGIF(self,"assets/loading.gif",size=(25,25))
-                waiting_label.grid(row=0,column=1,padx=3,pady=3,sticky='e')
-                loading_gif_label.grid(row=1,column=1,padx=3,pady=3,sticky='e')
-                widgets = [hostname_label,code_label,waiting_label,loading_gif_label]
+                self.waiting_label = ttk.Label(self, text="Waiting",font=consolas(10))
+                self.loading_gif_label = AnimatedGIF(self,"assets/loading.gif",size=(25,25))
+                self.connect_button = ttk.Button(self,text="Connect",style=apply_consolas_to_widget("Button", 12, "green"),width=7,command=self.accept_control)
+                self.waiting_label.grid(row=0,column=1,padx=20,sticky='e')
+                self.loading_gif_label.grid(row=1,column=1,padx=20,sticky='e')
+                self.connect_button.grid(row=0,column=1,rowspan=2,padx=20,sticky='e')
+                self.connect_button.grid_remove()
+                widgets = [hostname_label,code_label,self.waiting_label,self.loading_gif_label,self.connect_button]
             case _:
                 raise Exception("Invalid request type (not incoming/outgoing)")
 
@@ -782,8 +781,18 @@ class RequestFrame(ttk.Frame):
 
     def dimensions(self):
         self.grid_rowconfigure((0,1), weight=1)
-        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure((0,1), weight=1)
         self.grid_propagate(False)
+
+    def switch_to_connect_button(self):
+        self.waiting_label.grid_remove()
+        self.loading_gif_label.grid_remove()
+        self.connect_button.grid()
+
+    def accept_control(self):
+        self.parent.remove_request_frame(self)
+        wm.open_share_screen()
+
 
 # Frame that acts as a separator between RequestFrame's/
 class SeparatorFrame(tk.Frame):
@@ -799,6 +808,7 @@ class SeparatorFrame(tk.Frame):
         self.bind("<Button-5>",self.parent.parent.on_mouse_wheel)  # Linux
 
 # Label that breaks down a gif into multiple images and displays them, seeming like a gif.
+# todo: get this out of here, possibly into a new classes.py
 class AnimatedGIF(tk.Label):
     def __init__(self, parent, path, size=None, *args, **kwargs):
         super().__init__(parent,*args,**kwargs)
@@ -806,13 +816,14 @@ class AnimatedGIF(tk.Label):
         self.size = size
         self.frames = self.load_frames()
         self.current_frame = 0
+        self._job = None
         self.update_animation()
 
     def load_frames(self):
         frames = []
         gif = Image.open(self.path)
         for frame in ImageSequence.Iterator(gif):
-            if self.size:
+            if self.size is not None:
                 frame = frame.resize(self.size, Image.Resampling.LANCZOS)
             frames.append(ImageTk.PhotoImage(frame))
         return frames
@@ -820,24 +831,35 @@ class AnimatedGIF(tk.Label):
     def update_animation(self):
         self.configure(image=self.frames[self.current_frame])
         self.current_frame = (self.current_frame + 1) % len(self.frames)
-        self.after(100, self.update_animation)
+        self._job = self.after(100, self.update_animation)
+
+    def destroy(self):
+        if self._job is not None:
+            self.after_cancel(self._job)
+            self._job = None
+        super().destroy()
 
 
 class ShareScreen(tk.Tk):
-    def __init__(self):
+    def __init__(self, remote: Remote):
         # Simple configuration and variable loading
         super().__init__()
+        self.remote = remote
         self.title("Share - Contrology")
 
         # Complex configuration
         screen_width, screen_height = get_resolution_of_primary_monitor()
         self.geometry(f"{screen_width}x{screen_height}")
         self.attributes('-fullscreen', True)
-        # self.resizable(False, False) # todo: removed for debug
+        self.resizable(False, False)
         self.protocol("WM_DELETE_WINDOW",on_main_close) # todo: consider changing to opening the main screen again
 
         # Widgets
-        pass
+        info_frame_height = 50
+        canvas_height = screen_width - info_frame_height
+        self.info_frame = ShareScreenInfoFrame(self, info_frame_height, self.remote)
+        self.info_frame.grid(row=0,column=0)
+        self.canvas_frame = ShareScreenCanvasFrame(self, canvas_height, self.remote)
 
         # Functions
         self.dimensions()
@@ -845,11 +867,64 @@ class ShareScreen(tk.Tk):
     def dimensions(self):
         pass
 
+class ShareScreenInfoFrame(tk.Frame):
+    def __init__(self, parent, height: int, remote: Remote):
+        super().__init__(parent)
+        self.parent = parent
+        self.configure(height=height, width=self.parent.winfo_reqwidth())
+        self.remote = remote
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        now_controlling_label = ttk.Label(text="Now controlling", font=consolas(10))
+        hostname_label = ttk.Label(text=self.remote.hostname, font=consolas(12))
+        code_label = ttk.Button(text=self.remote.code) # font=consolas(12)
+
+        now_controlling_label.grid(row=0,column=0)
+        hostname_label.grid(row=1, column=0)
+        code_label.grid(row=2, column=1) # todo: testing
+
+    def dimensions(self):
+        self.grid_rowconfigure((0,1,2), weight=1)
+        self.grid_columnconfigure((0,1), weight=1)
+
+class ShareScreenCanvasFrame(tk.Frame):
+    def __init__(self, parent, height: int, remote: Remote):
+        super().__init__(parent)
+        self.parent = parent
+        self.remote = remote
+        self.height = height
+        self.width = SCREEN_WIDTH
+        self.configure(height=self.height, width=self.width)
+        self.canvas = None
+        self.canvas_image_id = None
+        self.scale_factor = min(self.width / remote.res_width, self.height / remote.res_height)
+
+        self.dimensions()
+        self.create_widgets()
+
+
+    def create_widgets(self):
+        self.canvas = tk.Canvas(self, bg="green")
+        self.canvas.pack(fill="both", expand=True)
+        default_image = Image.new('RGB', (self.remote.res_width, self.remote.res_height), (0, 0, 0))
+        new_width, new_height = int(self.remote.res_width * self.scale_factor), int(self.remote.res_height * self.scale_factor)
+        default_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        self.canvas_image_id = self.canvas.create_image(self.width//2, self.height//2, anchor="center", image=default_image)
+
+    def dimensions(self):
+        self.grid_propagate(False)
+
+    def load_latest_image(self):
+        pass
 
 if __name__ == "__main__":
     general_connection_thread = thr.Thread()
     track = thr.Thread(target=trackvar, daemon=True)
     track.start()
     d_handler = DataHandler()
+    current_remote = Remote()
     wm = WindowManager()
     wm.open_launch_screen()

@@ -9,6 +9,7 @@ import select
 import random as r
 from datetime import datetime
 import ssl
+import pickle
 
 # Mine
 from configuration import *
@@ -52,9 +53,12 @@ def handle_client(sock: socket.socket):
             m_handler.update(sender_code,create_sendable_data(b"","CODE_FOUND", sender_code))
 
             match data_type:
-                case "CONNECT_REQUEST":
+                case "CONNECT_REQUEST":  # Controller --> Remote
                     # The data should be {code}{hostname} (both of the controller so the remote knows)
                     data = f"{get_code_from_sock(client_ids, sock)}{get_bare_hostname(sock.getpeername()[0])}"
+                    data = data.encode('utf-8')
+                    data = create_sendable_data(data, data_type, code)
+                case "CONNECT_ACCEPT":  # Remote --> Controller
                     data = data.encode('utf-8')
                     data = create_sendable_data(data, data_type, code)
                 case _:
