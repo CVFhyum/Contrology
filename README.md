@@ -30,4 +30,4 @@ Pass this data into **parse_raw_data()** and you will get a string of data.
 * **CONNECT_ACCEPT** - Sent by the server to the controller to signify that controlling permission has been granted. The hostname of the remote is in the data for display purposes.
 * **CONNECT_DENY** - Sent by the remote to signify a negative response. The code of the controller is in the header.
 * **CONNECT_DENY** - Sent by the server to the controller to signify that controlling permission has been denied
-* **IMAGE_WIDTH_HEIGHT** - Sent by a client that is sending image bytes that should be decoded and displayed. The width and height of the image is supplied too. For example, a data type of IMAGE_1920_1080 would mean the original image size is 1920x1080.
+* **IMAGE** - Sent by a client that is sending image bytes that should be decoded and displayed.

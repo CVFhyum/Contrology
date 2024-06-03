@@ -126,7 +126,6 @@ class WindowManager:
         if self.main_screen_root is not None:
             self.main_screen_root.destroy()
         if self.share_screen_root is not None:
-            ic()
             self.share_screen_root.destroy()
 
 
@@ -166,6 +165,7 @@ def handle_general_connection(c: socket.socket):
                                         event.set()
                                         flag.true()
                                         current_remote.copy_from(data)
+                                        ic(current_remote)
                                     case "CONNECT_DENY":
                                         event, flag = controlling_connection_thread_flags
                                         event.set()
@@ -210,10 +210,8 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
     incoming_requests_frame_obj.add_request_frame(controller_hostname,controller_code,event,flag)
     event.wait()
     if flag:
-        my_remote_info = Remote(socket.gethostname(),self_code,get_resolution_of_primary_monitor())
-        ic(my_remote_info)
+        my_remote_info = Remote(socket.gethostname(), self_code, SCREEN_WIDTH, SCREEN_HEIGHT)
         info_bytes = pickle.dumps(my_remote_info)
-        ic(info_bytes)
         d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code))
         with MSS() as mss_obj:
             while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.
@@ -862,6 +860,7 @@ class ShareScreen(tk.Tk):
         self.info_frame = ShareScreenInfoFrame(self, info_frame_height, self.remote)
         self.info_frame.grid(row=0,column=0)
         self.canvas_frame = ShareScreenCanvasFrame(self, canvas_height, self.remote)
+        self.canvas_frame.grid(row=1,column=0)
 
         # Functions
         self.dimensions()
@@ -882,15 +881,14 @@ class ShareScreenInfoFrame(tk.Frame):
     def create_widgets(self):
         now_controlling_label = ttk.Label(text="Now controlling", font=consolas(10))
         hostname_label = ttk.Label(text=self.remote.hostname, font=consolas(12))
-        code_label = ttk.Button(text=self.remote.code) # font=consolas(12)
+        code_label = ttk.Label(text=self.remote.code, font=consolas(12))
 
         now_controlling_label.grid(row=0,column=0)
         hostname_label.grid(row=1, column=0)
-        code_label.grid(row=2, column=1) # todo: testing
+        code_label.grid(row=2, column=0)
 
     def dimensions(self):
         self.grid_rowconfigure((0,1,2), weight=1)
-        self.grid_columnconfigure((0,1), weight=1)
 
 class ShareScreenCanvasFrame(tk.Frame):
     def __init__(self, parent, height: int, remote: Remote):

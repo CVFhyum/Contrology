@@ -59,7 +59,7 @@ def handle_client(sock: socket.socket):
                     data = data.encode('utf-8')
                     data = create_sendable_data(data, data_type, code)
                 case "CONNECT_ACCEPT":  # Remote --> Controller
-                    data = pickle.loads(data)
+                    data = pickle.dumps(data)
                     data = create_sendable_data(data, data_type, code)
                 case _:
                     data = data.encode('utf-8')  # Encode the data
