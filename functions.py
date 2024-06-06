@@ -17,8 +17,8 @@ import pickle
 # With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
 def get_geometry_string(window_width: int, window_height: int) -> str:
     screen_width, screen_height = get_resolution_of_primary_monitor()
-    x_offset, y_offset = int((screen_width-window_width)/2), int((screen_height-window_height)/2)
-    # TODO: remove extra screen offset
+    x_offset = int((screen_width-window_width)/2)
+    y_offset = int((screen_height-window_height)/2)
     return f"{window_width}x{window_height}+{x_offset}+{y_offset}"
 
 # Get resolution of monitor that is marked as primary by the OS.

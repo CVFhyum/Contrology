@@ -183,7 +183,6 @@ def handle_general_connection(c: socket.socket):
                                         code_event.set()
                                         code_flag.false()
                                     case "IMAGE":
-                                        data.encode('utf-8')
                                         d_handler.set_last_image(data)
                                     case _:
                                         d_handler.insert_new_incoming_message((data_type, data))
@@ -202,7 +201,7 @@ def handle_general_connection(c: socket.socket):
                 accept_data = False
                 c.close()
                 break
-
+        connected = False
         c.close()
 
 
@@ -222,7 +221,7 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
         d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code,pickled=True))
         with MSS() as mss_obj:
             while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.
-                screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, 1920, 1080)
+                screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
                 screenshot_data = create_sendable_data(screenshot_bytes, "IMAGE",controller_code)
                 d_handler.insert_new_outgoing_message(screenshot_data)
     else:
@@ -258,8 +257,9 @@ def handle_controlling_connection(remote_code):
 
 
 def on_main_close():
-    global accept_data
+    global accept_data, connected
     wm.close_all()
+    connected = False
     accept_data = False
 
 
@@ -906,16 +906,17 @@ class ShareScreenCanvasFrame(ttk.Frame):
 
         self.canvas: Optional[tk.Canvas] = None
         self.canvas_image_id = None
-        self.default_image = None
         self.display_image = None
         self.scale_factor = min(self.width / remote.res_width,self.height / remote.res_height)
+        ic(self.scale_factor)
         self.resized_width = int(self.remote.res_width * self.scale_factor)
-        self.resized_height = int(self.remote.res_width * self.scale_factor)
+        self.resized_height = int(self.remote.res_height * self.scale_factor)
+        ic(self.resized_width, self.resized_height)
 
         self.dimensions()
         self.create_widgets()
 
-        self.update_image_thread = thr.Thread(target=self.load_latest_image)
+        self.update_image_thread = thr.Thread(target=self.load_latest_image,daemon=True)
         self.update_image_thread.start()
 
     def create_widgets(self):
@@ -923,20 +924,21 @@ class ShareScreenCanvasFrame(ttk.Frame):
         self.canvas.pack(fill=tk.BOTH,expand=True)
         default_image = Image.new('RGB', (self.remote.res_width, self.remote.res_height), (0,0,0))
         default_image.resize((self.resized_width, self.resized_height), Image.Resampling.LANCZOS)
-        self.default_image = ImageTk.PhotoImage(default_image)
-        self.canvas_image_id = self.canvas.create_image(self.width // 2,self.height // 2,anchor="center",image=self.default_image)
+        self.display_image = ImageTk.PhotoImage(default_image)
+        self.canvas_image_id = self.canvas.create_image(self.width // 2,self.height // 2,anchor="center",image=self.display_image)
 
     def dimensions(self):
         pass
 
     def load_latest_image(self):
-        while True:
+        while accept_data and connected:
             with data_handler_lock:
-                self.display_image = d_handler.get_last_image()
-            self.display_image = Image.frombytes("RGB", (self.remote.res_width, self.remote.res_height), self.display_image)
-            self.display_image = self.display_image.resize((self.resized_width, self.resized_height),Image.Resampling.LANCZOS)
-            self.display_image = ImageTk.PhotoImage(self.display_image)
+                new_image = d_handler.get_last_image()
+            new_image = Image.frombytes("RGB", (self.remote.res_width, self.remote.res_height), new_image)
+            new_image = new_image.resize((self.resized_width, self.resized_height),Image.Resampling.LANCZOS)
+            self.display_image = ImageTk.PhotoImage(new_image)
             self.canvas.itemconfig(self.canvas_image_id, image=self.display_image)
+            self.canvas.image = self.display_image
 
 if __name__ == "__main__":
     general_connection_thread = thr.Thread()
