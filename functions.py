@@ -13,6 +13,7 @@ from mss.windows import MSS
 import threading as thr
 from time import sleep
 import pickle
+from sql_handler import SQLHandler
 
 # With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
 def get_geometry_string(window_width: int, window_height: int) -> str:
@@ -50,12 +51,12 @@ def create_sendable_data(data: bytes, data_type: str, recipient_code: str, pickl
 # Given a header, parse it into its components (data length, data type, recipient code) and return them.
 def parse_header(header: bytes) -> tuple[int, str, str]:
     header = header.decode('utf-8', 'ignore')
-    data_length = int(header[:DATA_HEADER_LENGTH])
-    header = header[DATA_HEADER_LENGTH:]
+    data_length = int(header[:DATA_LENGTH_LENGTH])
+    header = header[DATA_LENGTH_LENGTH:]
     data_type = header[:DATA_TYPE_LENGTH].strip()
     header = header[DATA_TYPE_LENGTH:]
-    recipient_code = header[:RECIPIENT_HEADER_LENGTH]
-    header = header[RECIPIENT_HEADER_LENGTH:]
+    recipient_code = header[:RECIPIENT_CODE_LENGTH]
+    header = header[RECIPIENT_CODE_LENGTH:]
     if len(header) != 0:
         raise Exception(f"Not all of header information was parsed")
     return data_length, data_type, recipient_code
@@ -71,18 +72,23 @@ def parse_raw_data(data: bytes, pickled=False, image=False) -> Union[str, bytes]
         return data
     return data.decode('utf-8', 'ignore')
 
+# Given a ready piece of data created by create_sendable_data(), return the header components of that data
+def parse_header_from_data(data: bytes):
+    header = data[:HEADER_LENGTH]
+    components = parse_header(header)
+    return components
+
 # Get the time in the form of HH:MM:SS (Example: 14:37:06)
 def get_hhmmss():
     return str(datetime.now().time()).split('.')[0]
 
-# Generate a 10 character alphanumeric code for every client that connects to the server
+# Generate a 10-digit code for every client that connects to the server
 # This code is used for identifying clients.
-def generate_alphanumeric_code(existing_client_ids: Dict[str, socket.socket]) -> str:
-    code = "".join([r.choice(CODE_CHARACTER_POOL) for x in range(RECIPIENT_HEADER_LENGTH)])  # Make new code
-    # TODO: make the pool of used codes come from sql, not the temporary client ids
-    while code in existing_client_ids.keys() or code == SERVER_CODE or code == ALL_CODE:  # Check code doesn't exist, if it does make another one
-        code = "".join([r.choice(CODE_CHARACTER_POOL) for x in range(RECIPIENT_HEADER_LENGTH)])
-    return code
+def generate_code(db_handler: SQLHandler) -> str:
+    while True:
+        new_code = ''.join(r.choice(CODE_CHARACTER_POOL) for _ in range(RECIPIENT_CODE_LENGTH))  # Adjust length as needed
+        if not db_handler.is_code_exists(new_code):
+            return new_code
 
 def get_resized_image(image_path: str, size: Union[tuple[int,int], int]) -> ImageTk.PhotoImage:
     img = Image.open(image_path)

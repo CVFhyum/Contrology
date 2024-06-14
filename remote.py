@@ -1,3 +1,10 @@
+"""
+todo: Think of a better name than UserInfo
+Consider changing this class to be a more generic UserInfo class
+Consider adding a helper function which creates a UserInfo object that can be sent/used
+"""
+
+
 class Remote:
     def __init__(self, hostname=None, code=None, res_width=None, res_height=None):
         self._hostname = hostname

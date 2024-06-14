@@ -17,17 +17,19 @@ from functions import *
 from constants import *
 from message_handler import MessageHandler
 from sql_handler import SQLHandler
+from bidirectional_dict import BidirectionalDict
 
 # When a socket raises an error, it should be immediately closed gracefully.
 # This function removes it from clients, client_ids, and closes it.
 def handle_sock_closing(closing_sock: socket.socket):
-    global client_ids
+    user_id = new_client_ids[closing_sock]
+    user_info = db_handler.get_user_info(user_id=user_id)
+    user_address = user_info["address"]
+    db_handler.set_user_connection_status(user_id, False)
+    print(f"[{get_hhmmss()}] Client Disconnected | {get_bare_hostname(user_address)} | {user_address} | {user_info['code']}")
+    db_handler.log(user_id=user_info["id"],user_hostname=user_info["hostname"],action="DISCONNECTION")
+    del new_client_ids[user_id]
     clients.remove(closing_sock)
-    for code, sock in client_ids.items():
-        if sock is closing_sock:
-            print(f"[{get_hhmmss()}] Client Disconnected {closing_sock.getsockname()} | {code}")
-            del client_ids[code]
-            break
     closing_sock.close()
 
 # When the server detects data incoming from an existing socket, this function is called.
@@ -50,42 +52,62 @@ def handle_client(sock: socket.socket):
         # TODO: rethink way of handling request packets and sending a not_found packet back.
         # TODO: maybe make message handler read the code from the header and then it wont need to be a dictionary
         # TODO: maybe make a function to handle different data types and what we need to do with them
-        if code not in list(client_ids.keys()):
-            code = get_code_from_sock(client_ids, sock) # get code from socket object
-            data = create_sendable_data(b"", "CODE_NOT_FOUND", code)
+        sender_info = db_handler.get_user_info(user_id=new_client_ids[sock])
+        target_info = db_handler.get_user_info(code=code)
+        if not db_handler.code_exists(code):
+            data = create_sendable_data(b"", "CODE_NOT_FOUND", sender_info["code"])
         else:
-            sender_code = get_code_from_sock(client_ids, sock)
-            m_handler.update(sender_code,create_sendable_data(b"","CODE_FOUND", sender_code))
+            m_handler.add(create_sendable_data(b"", "CODE_FOUND", sender_info["code"]))
 
             match data_type:
                 case "CONNECT_REQUEST":  # Controller --> Remote
                     # The data should be {code}{hostname} (both of the controller so the remote knows)
-                    data = f"{get_code_from_sock(client_ids, sock)}{get_bare_hostname(sock.getpeername()[0])}"
+                    # todo: change this to a UserInfo class
+                    data = f"{sender_info['code']}{get_bare_hostname(sock.getpeername()[0])}"
                     data = data.encode('utf-8')
                     data = create_sendable_data(data, data_type, code)
+                    db_handler.log(user_id=sender_info['id'],
+                                   user_hostname=sender_info['hostname'],
+                                   action="REQUEST",
+                                   target_user_id=target_info['id'],
+                                   target_user_hostname=['hostname'])
                 case "CONNECT_ACCEPT":  # Remote --> Controller
                     data = pickle.dumps(data)
                     data = create_sendable_data(data, data_type, code, pickled=True)
+                    db_handler.log(user_id=sender_info['id'],
+                                   user_hostname=sender_info['hostname'],
+                                   action="ACCEPT_REQUEST",
+                                   target_user_id=target_info['id'],
+                                   target_user_hostname=['hostname'])
+                case "CONNECT_DENY":  # Remote --> Controller
+                    data = data.encode('utf-8')  # Encode the data
+                    data = create_sendable_data(data,data_type,code)  # Wrap the data so it's ready to be resent
+                    db_handler.log(user_id=sender_info['id'],
+                                   user_hostname=sender_info['hostname'],
+                                   action="DENY_REQUEST",
+                                   target_user_id=target_info['id'],
+                                   target_user_hostname=['hostname'])
                 case "IMAGE":
                     data = create_sendable_data(data, data_type, code)
                 case _:
                     data = data.encode('utf-8')  # Encode the data
                     data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent
-        m_handler.update(code, data)
+        m_handler.add(data)
     except Exception as e:
         print(f"Error handling socket: {e}") # todo: remove this
         handle_sock_closing(sock)
 
 # Create handlers
-m_handler = MessageHandler()
 db_handler = SQLHandler("contrology.db")
+m_handler = MessageHandler(db_handler)
+
 
 clients = []  # List of all client socket objects
-client_ids = {}  # alphanumeric id: client socket
+client_ids = {}  # alphanumeric code: client socket
+new_client_ids = BidirectionalDict() # user id: client socket
 
 
 def main():
-    screen_width, screen_height = get_resolution_of_primary_monitor()
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # server = ssl.wrap_socket(server, ssl_version=ssl.PROTOCOL_TLSv1_2)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2**30) # Make send buffer 2^30 bytes long
@@ -100,26 +122,35 @@ def main():
             for sock in rlist:
                 if sock is server:  # New connection pending
                     client, addr = server.accept()  # Accept the connection
-                    if db_handler.is_value_in("addresses", "address", addr[0]):  # Check if the address has connected before and has a record in the database
-                        new_code = db_handler.get_code_for_address(addr[0])
-                    else:  # If they are new, give them a new code and add them to the database
-                        new_code = generate_alphanumeric_code(client_ids)
-                        db_handler.insert_address_and_code(addr[0], new_code)
-                    m_handler.update(new_code,create_sendable_data(b"","INITIAL_ACCEPT", new_code))
-                    client_ids.update({new_code: client})  # Add socket:code to dictionary
+                    # Get the user info
+                    user_info = db_handler.get_user_info(ip_addr=addr[0])
+                    if user_info is not None:  # Check if the user exists
+                        new_code = user_info["code"]
+                        db_handler.set_user_connection_status(user_info["id"], True)
+                    # If the user is new, give them a new code and add them to the database
+                    else:
+                        new_code = generate_code(db_handler)
+                        user_id = db_handler.add_user(hostname=get_bare_hostname(addr[0]), address=addr[0], code=new_code, is_connected=True)
+                        user_info = db_handler.get_user_info(user_id=user_id)
+                    new_client_ids[user_info["id"]] = client
+                    db_handler.log(user_id=user_info["id"],
+                                   user_hostname=user_info["hostname"],
+                                   action="CONNECTION")
+                    m_handler.add(create_sendable_data(b"", "INITIAL_ACCEPT", new_code))  # Send client initialisation packet
                     clients.append(client)
-                    print(f"[{get_hhmmss()}] New Client Connected {addr} | {new_code}")
+                    print(f"[{get_hhmmss()}] Client Connected | {get_bare_hostname(addr[0])} | {addr} | {new_code}")
 
                 else:  # Incoming data from existing client, so handle them
                     handle_client(sock)
             # End
-            m_handler.send_all(client_ids)
+            m_handler.send_all(new_client_ids)
     except KeyboardInterrupt:
         print("Server interrupted...")
     finally:
         for client in clients:
             client.close()
         server.close()
+        db_handler.set_all_users_disconnected()
         db_handler.disconnect()
 
 if __name__ == "__main__":

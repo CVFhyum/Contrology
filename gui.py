@@ -1,3 +1,13 @@
+"""
+Consistency checks:
+- Make sure that each frame is gridded outside the frame __init__ method itself, but rather the class that is creating the frame
+- Make sure that all containers (roots, toplevels, frames) have their width and height as attributes and are defined as such
+- > self.width, self.height = w, h
+- Make sure that all functions have type hints
+- Make sure that for every window with a create_widgets method and a dimensions method, that dimensions is called before widget creation.
+- Make sure that every frame in a container is an attribute of it (using self.)
+"""
+
 from functions import *
 from constants import *
 from configuration import *
@@ -16,6 +26,7 @@ from time import sleep
 from random import randint as ri
 from mss.windows import MSS
 from functools import partial
+import argon2
 
 # Global variables that can be accessed all throughout the code
 SCREEN_WIDTH, SCREEN_HEIGHT = get_resolution_of_primary_monitor()
@@ -26,7 +37,7 @@ connected = False  # Flag that documents if the client is currently connected to
 incoming_requests_frame_obj: Any = None  # The frame object of incoming requests, so it can be edited in the global scope.
 outgoing_requests_frame_obj: Any = None  # The frame object of outgoing requests, so it can be edited in the global scope.
 connect_feedback_var: Optional[tk.StringVar] = None  # StringVar of the feedback label in the connect screen
-controlling_connection_thread_flags = thr.Event(), FlagObject(False)  #
+controlling_connection_thread_flags = thr.Event(), FlagObject(False)
 code_flags = thr.Event(), FlagObject(False)
 remote_connection_thread_flags = {}
 remote_thread_id = 0
@@ -45,12 +56,16 @@ def trackvar():
 # This class has one object during runtime and manages the current window that is open.
 # This class makes sure only one window is open at once, and raises an error if more than one is open.
 # This class has functions for opening different windows (per the user's request).
+# The roots attribute of this object is a list of roots, either None or the tk.Tk object.
+# [launch_root, main_root, share_root, admin_root]
 class WindowManager:
     def __init__(self):
         # Optional[tk.Tk] -> tk.Tk or None
         self._launch_screen_root: Optional[tk.Tk] = None
         self._main_screen_root: Optional[tk.Tk] = None
         self._share_screen_root: Optional[tk.Tk] = None
+        self._admin_screen_root: Optional[tk.Tk] = None
+        self._roots: list[Optional[tk.Tk]] = [None]*4
 
     @property
     def launch_screen_root(self):
@@ -61,6 +76,7 @@ class WindowManager:
         if value is not None and self.launch_screen_root is not None:
             raise ValueError("Launch Screen Root modify attempt failed")
         self._launch_screen_root = value
+        self._roots[0] = value
 
     @property
     def main_screen_root(self):
@@ -71,6 +87,7 @@ class WindowManager:
         if value is not None and self.main_screen_root is not None:
             raise ValueError("Main Screen Root modify attempt failed")
         self._main_screen_root = value
+        self._roots[1] = value
 
     @property
     def share_screen_root(self):
@@ -81,57 +98,66 @@ class WindowManager:
         if value is not None and self.share_screen_root is not None:
             raise ValueError("Share Screen Root modify attempt failed")
         self._share_screen_root = value
+        self._roots[2] = value
+
+    @property
+    def admin_screen_root(self):
+        return self._admin_screen_root
+
+    @admin_screen_root.setter
+    def admin_screen_root(self,value):
+        if value is not None and self.admin_screen_root is not None:
+            raise ValueError("Admin Screen Root modify attempt failed")
+        self._admin_screen_root = value
+        self._roots[3] = value
 
     def open_launch_screen(self):
-        if self.main_screen_root is not None:
-            self.main_screen_root.destroy()
-            self.main_screen_root = None
-        if self.share_screen_root is not None:
-            self.share_screen_root.destroy()
-            self.share_screen_root = None
+        for root_index, root in enumerate(self._roots):
+            if root is not None:
+                root.destroy()
+                self._roots[root_index] = None
         self.launch_screen_root = LaunchScreen()
         self.launch_screen_root.mainloop()
 
     def open_main_screen(self):
-        if self.launch_screen_root is not None:
-            self.launch_screen_root.destroy()
-            self.launch_screen_root = None
-        if self.share_screen_root is not None:
-            self.share_screen_root.destroy()
-            self.share_screen_root = None
+        for root_index,root in enumerate(self._roots):
+            if root is not None:
+                root.destroy()
+                self._roots[root_index] = None
         self.main_screen_root = MainScreen()
         self.main_screen_root.mainloop()
 
     def open_share_screen(self):
-        if self.launch_screen_root is not None:
-            self.launch_screen_root.destroy()
-            self.launch_screen_root = None
-        if self.main_screen_root is not None:
-            self.main_screen_root.destroy()
-            self.main_screen_root = None
+        for root_index,root in enumerate(self._roots):
+            if root is not None:
+                root.destroy()
+                self._roots[root_index] = None
         self.share_screen_root = ShareScreen(current_remote)
         self.share_screen_root.mainloop()
 
+    def open_admin_screen(self):
+        for root_index, root in enumerate(self._roots):
+            if root is not None:
+                root.destroy()
+                self._roots[root_index] = None
+        self.admin_screen_root = AdminScreen()
+        self.admin_screen_root.mainloop()
+
     def update_all(self):
-        if self.launch_screen_root is not None:
-            self.launch_screen_root.update()
-        if self.main_screen_root is not None:
-            self.main_screen_root.update()
-        if self.share_screen_root is not None:
-            self.main_screen_root.update()
+        for root_index, root in enumerate(self._roots):
+            if root is not None:
+                root.update()
 
     def close_all(self):
-        if self.launch_screen_root is not None:
-            self.launch_screen_root.destroy()
-        if self.main_screen_root is not None:
-            self.main_screen_root.destroy()
-        if self.share_screen_root is not None:
-            self.share_screen_root.destroy()
+        for root_index,root in enumerate(self._roots):
+            if root is not None:
+                root.destroy()
 
 
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
 # This thread takes care of receiving incoming data from the server and loading it into incoming_data
 def handle_general_connection(c: socket.socket):
+    # todo - move lines from here to connection_status condition statement into try_to_connect - if the client gets INITIAL_DENY main screen should not be open!
     global self_code, connected, accept_data, remote_thread_id
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
     ic(self_code)
@@ -160,7 +186,7 @@ def handle_general_connection(c: socket.socket):
                             with data_handler_lock: # todo: change this lock to only use it while actually editing
                                 match data_type:
                                     case "CONNECT_REQUEST":
-                                        requester_code, requester_hostname = data[:RECIPIENT_HEADER_LENGTH], data[RECIPIENT_HEADER_LENGTH:]
+                                        requester_code, requester_hostname = data[:RECIPIENT_CODE_LENGTH],data[RECIPIENT_CODE_LENGTH:]
                                         remote_connection_thread = thr.Thread(target=handle_remote_connection, args=(requester_code, requester_hostname, remote_thread_id))
                                         remote_connection_thread_flags.update({remote_thread_id: (thr.Event(),FlagObject(False))})
                                         remote_connection_thread.start()
@@ -353,13 +379,46 @@ class LaunchScreenButtonsFrame(tk.Frame):
         self.dimensions()
 
     def create_widgets(self):
+
         """ Callbacks """
+
+        def try_to_connect():
+            global connected,general_connection_thread
+            self.feedback_label_var.set("Trying to connect...")
+            feedback_label.config(foreground='green')
+            self.update()  # Fixes weird bug where screen doesn't update
+            sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+            try:
+                sock.connect((SERVER_IP,SERVER_PORT))
+                self.feedback_label_var.set("Connected!")
+                feedback_label.config(foreground='green')
+                self.update()
+            except (ConnectionRefusedError,ConnectionResetError,ConnectionError,ConnectionAbortedError,OSError) as e:
+                print(f"Couldn't connect to server: {e}")
+                self.feedback_label_var.set("Couldn't connect to server.")
+                feedback_label.config(foreground='red')
+                connected = None
+                return
+            connected = True
+            general_connection_thread = thr.Thread(target=handle_general_connection,args=(sock,))
+            general_connection_thread.start()
+
+        def general_connect():
+            try_to_connect()
+            if connected:
+                wm.open_main_screen()
+
+        def admin_connect():
+            try_to_connect()
+            if connected:
+                wm.open_admin_screen()
+
         # Takes care of swapping the button widget with the entry widget on the launch screen
         def switch_admin_widgets(_=None):
             # _ is not None if the function is invoked by pressing the escape key
             # admin_button_view is True if the button is currently visible
-            # If the parenthetical expression evaluates to True, the button is visible and escape was pressed
-            # Negate the parenthetical expression to only switch the widgets if escape was pressed while the entry was visible
+            # If the parenthetical expression evaluates to True, the button is visible and escape was pressed, which shouldn't do anything
+            # Negate the parenthetical expression to only switch the widgets if escape was pressed while the *entry* was visible
             if not (_ is not None and self.admin_button_view):
                 if self.admin_button_view:
                     admin_log_in_button.grid_remove()
@@ -387,31 +446,16 @@ class LaunchScreenButtonsFrame(tk.Frame):
         def admin_password_entry_handle_enter(_=None):
             # todo: handle the entered password (verify it)
             print(self.admin_password_entry_var.get())
-
-        def try_to_connect():
-            global connected, general_connection_thread
-            self.feedback_label_var.set("Trying to connect...")
-            feedback_label.config(foreground='green')
-            self.update()  # Fixes weird bug where screen doesn't update
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                sock.connect((SERVER_IP,SERVER_PORT))
-                self.feedback_label_var.set("Connected!")
-                feedback_label.config(foreground='green')
-                self.update()
-            except (ConnectionRefusedError, ConnectionResetError, ConnectionError, ConnectionAbortedError, OSError) as e:
-                print(f"Couldn't connect to server: {e}")
-                self.feedback_label_var.set("Couldn't connect to server.")
-                feedback_label.config(foreground='red')
-                connected = None
-                return
-            connected = True
-            general_connection_thread = thr.Thread(target=handle_general_connection,args=(sock,))
-            general_connection_thread.start()
-            wm.open_main_screen()
+                ph = argon2.PasswordHasher()
+                ph.verify(admin_password, self.admin_password_entry_var.get())
+                admin_connect()
+            except (argon2.exceptions.VerificationError, argon2.exceptions.InvalidHashError):
+                # todo: add wrong password label.
+                print("incorrect password")
 
         """ Creation """
-        launch_app_button = ttk.Button(self,text="Launch App", style=apply_consolas_to_widget("Button", 32), command=try_to_connect)
+        launch_app_button = ttk.Button(self,text="Launch App", style=apply_consolas_to_widget("Button", 32), command=general_connect)
         feedback_label = ttk.Label(self, textvariable=self.feedback_label_var, font=consolas(12), foreground='green')
         admin_log_in_button = ttk.Button(self, text="Administrator Log In", style=apply_consolas_to_widget("Button", 12), command=switch_admin_widgets)
         admin_password_entry = ttk.Entry(self, textvariable=self.admin_password_entry_var, style='grey.TEntry',font=consolas(13))
@@ -476,6 +520,7 @@ class MainScreenInfoFrame(tk.Frame):
         self.dimensions()
 
     def create_widgets(self):
+        # todo: change this using tk.after or using a thread, cannot sleep and block in a tkinter program
         def show_copied_message():
             my_code_click_to_copy_label.configure(text="Copied to Clipboard!", foreground='green')
             sleep(1)
@@ -939,6 +984,160 @@ class ShareScreenCanvasFrame(ttk.Frame):
             self.display_image = ImageTk.PhotoImage(new_image)
             self.canvas.itemconfig(self.canvas_image_id, image=self.display_image)
             self.canvas.image = self.display_image
+
+
+class AdminScreen(tk.Tk):
+    def __init__(self):
+        # Simple configuration and variable loading
+        super().__init__()
+        self.title("Admin - Contrology")
+
+        # Complex configuration
+        self.width, self.height = 1200, 800
+        self.geometry(get_geometry_string(self.width, self.height))
+        self.resizable(False, False)
+        self.protocol("WM_DELETE_WINDOW",on_main_close)
+
+        # Widgets
+        self.title_frame = AdminScreenTitleFrame(self)
+        self.info_frame = AdminScreenInfoFrame(self)
+        self.content_frame = AdminScreenContentFrame(self)
+
+        self.title_frame.grid(row=0,column=0)
+        self.info_frame.grid(row=0,column=1)
+        self.content_frame.grid(row=1,column=0,columnspan=2)
+
+        # Functions
+        self.dimensions()
+
+    def dimensions(self):
+        pass
+
+class AdminScreenTitleFrame(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.configure(highlightthickness=1, highlightbackground='green')
+        self.width, self.height = int(parent.width*3/4),int(parent.height*3/20)
+        self.configure(width=self.width, height=self.height)
+        self.admin_logo = ImageTk.PhotoImage(Image.open("assets/admin_logo.png"))
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        # todo: if you wish to add space between the logo and the label, prompt chatgpt for style with the padding configuration.
+        title_label = ttk.Label(self, text="Administrator Panel", image=self.admin_logo, compound='left', font=consolas(36))
+        title_label.grid(row=0,column=0)
+
+    def dimensions(self):
+        self.grid_rowconfigure(0,weight=1)
+        self.grid_columnconfigure(0,weight=1)
+        self.grid_propagate(False)
+
+class AdminScreenInfoFrame(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.configure(highlightthickness=1, highlightbackground='green')
+        self.width, self.height = int(parent.width*1/4),int(parent.height*3/20)
+        self.configure(width=self.width,height=self.height)
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        # todo: if changing Remote to UserInfo class, use the described helper function to fetch the information here
+        hostname_label = ttk.Label(self, text=socket.gethostname(), font=consolas(16))
+        code_label = ttk.Label(self, text=self_code,font=consolas(16))
+        administrator_label = ttk.Label(self, text="Administrator", font=consolas(12), foreground='grey')
+
+        hostname_label.grid(row=0,column=0,sticky='s')
+        code_label.grid(row=1,column=0,sticky='n')
+        administrator_label.grid(row=2,column=0)
+
+
+    def dimensions(self):
+        self.grid_rowconfigure((0,1), weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_propagate(False)
+
+class AdminScreenContentFrame(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.width, self.height = parent.width, int(parent.height*17/20)
+        self.configure(width=self.width,height=self.height)
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        notebook = AdminScreenNotebook(self)
+
+        notebook.grid(row=0,column=0)
+
+    def dimensions(self):
+        self.grid_propagate(False)
+
+class AdminScreenNotebook(ttk.Notebook):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.width, self.height = parent.width, parent.height
+        self.configure(width=self.width, height=self.height)
+        style = ttk.Style()
+        style.configure("TNotebook.Tab", font=consolas(14))
+        style.map("TNotebook.Tab", foreground=[("!selected", "grey")])
+        self.enable_traversal()
+
+        self.configure(style="TNotebook")
+        self.logs_tab = None
+        self.users_tab = None
+        self.logs_tab_logo = ImageTk.PhotoImage(Image.open("assets/logs_icon.png"))
+        self.users_tab_logo = ImageTk.PhotoImage(Image.open("assets/users_icon.png"))
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        self.logs_tab = AdminScreenNotebookLogs(self)
+        self.users_tab = AdminScreenNotebookUsers(self)
+
+        self.add(self.logs_tab, text="Logs", image=self.logs_tab_logo, compound='left')
+        self.add(self.users_tab, text="Users", image=self.users_tab_logo, compound='left')
+
+        self.select(self.logs_tab)
+
+    def dimensions(self):
+        pass
+
+class AdminScreenNotebookLogs(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.width, self.height = parent.width, parent.height
+        self.configure(width=self.width, height=self.height)
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        pass
+
+    def dimensions(self):
+        pass
+
+class AdminScreenNotebookUsers(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.width, self.height = parent.width, parent.height
+        self.configure(width=self.width, height=self.height)
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        pass
+
+    def dimensions(self):
+        pass
+
 
 if __name__ == "__main__":
     general_connection_thread = thr.Thread()
