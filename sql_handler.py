@@ -44,7 +44,7 @@ class SQLHandler:
             self.connection.rollback()
             return None
 
-    def fetch_data_generator(self,query: str,params=None,chunk_size=75):
+    def fetch_data_generator(self,query: str,params=None,chunk_size=100):
         cursor = self.execute_query(query,params)
         while True:
             rows = cursor.fetchmany(chunk_size)
@@ -52,8 +52,7 @@ class SQLHandler:
                 break
             yield rows
 
-
-    def fetchall(self, query: str, params=None, chunk_size=75):
+    def fetchall(self, query: str, params=None, chunk_size=100):
         for rows in self.fetch_data_generator(query, params, chunk_size):
             yield rows
 

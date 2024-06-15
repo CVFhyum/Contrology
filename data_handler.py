@@ -1,3 +1,7 @@
+"""
+Make attributes here private
+"""
+
 import socket
 from icecream import ic
 
@@ -6,18 +10,19 @@ from icecream import ic
 
 class DataHandler:
     def __init__(self):
-        # Incoming pdata queue -> Tuples of pdata -> (pdata type, pdata)
-        # Outgoing pdata queue -> Ready pdata (with headers)
+        # Incoming data queue -> Tuples of data -> (data type, data)
+        # Outgoing data queue -> Ready data (with headers)
         self.incoming_data_queue: list = []
         self.outgoing_data_queue: list = []
         self.last_image_received = None
 
-    # Insert pdata as a tuple (pdata type, pdata)
+    # Insert data as a tuple (data type, data)
     def insert_new_incoming_message(self, data: tuple[str, str]):
         self.incoming_data_queue.append(data)
 
-    # Insert pdata as "ready pdata" (with a header)
+    # Insert data as "ready data" (with a header)
     def insert_new_outgoing_message(self, data: bytes):
+        # todo: add a function in functions.py called has_header to make sure data has a header here
         self.outgoing_data_queue.append(data)
 
     def set_last_image(self, image: bytes):

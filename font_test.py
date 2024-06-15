@@ -1,8 +1,12 @@
 from sql_handler import SQLHandler
+from icecream import ic
+import pickle
 
 db_handler = SQLHandler("contrology.db")
 a = []
 for row in db_handler.get_all_logs():
-    a.append(row)
+    for data in row:
+        a.append(data)
 
-print(a[0])
+b = pickle.dumps(a)
+print(len(b))

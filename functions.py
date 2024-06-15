@@ -35,17 +35,17 @@ def get_resolution_of_primary_monitor() -> tuple[int,int]:
 
 # Given a socket and a constant length, receive exactly length bytes from that socket and return them.
 # Used always, recv() is only used for receiving initial headers.
-# The point is to make sure no pdata gets lost because of pdata being bigger than the maximum recv() limit.
+# The point is to make sure no data gets lost because of data being bigger than the maximum recv() limit.
 def recvall(sock: socket.socket, length: int) -> bytes:
     buffer = b''
     while len(buffer) < length: # Since we keep adding to buffer, we will continue if it hasn't surpassed the desired length
         data = sock.recv(length - len(buffer))
-        if not data: # Client disconnected during pdata receipt?
-            raise Exception("Error occurred while trying to receive pdata")
+        if not data: # Client disconnected during data receipt?
+            raise Exception("Error occurred while trying to receive data")
         buffer += data
     return buffer
 
-# Takes care of attaching a header and compressing the pdata
+# Takes care of attaching a header and compressing the data
 def create_sendable_data(data: bytes, data_type: str, recipient_code: str, pickled=False) -> bytes:
     if not pickled:
         if len(data) != 0:
@@ -53,7 +53,7 @@ def create_sendable_data(data: bytes, data_type: str, recipient_code: str, pickl
     data_header = Header(len(data), data_type, recipient_code)
     return data_header.get_header_bytes() + data
 
-# Given a header, parse it into its components (pdata length, pdata type, recipient code) and return them.
+# Given a header, parse it into its components (data length, data type, recipient code) and return them.
 def parse_header(header: bytes) -> tuple[int, str, str]:
     header = header.decode('utf-8', 'ignore')
     data_length = int(header[:DATA_LENGTH_LENGTH])
@@ -67,7 +67,7 @@ def parse_header(header: bytes) -> tuple[int, str, str]:
     return data_length, data_type, recipient_code
 
 
-# Takes care of decompressing, depickling, and decoding the pdata
+# Takes care of decompressing, depickling, and decoding the data
 def parse_raw_data(data: bytes, pickled=False, image=False) -> Union[str, bytes]:
     if pickled:
         return pickle.loads(data)
@@ -77,7 +77,7 @@ def parse_raw_data(data: bytes, pickled=False, image=False) -> Union[str, bytes]
         return data
     return data.decode('utf-8', 'ignore')
 
-# Given a ready piece of pdata created by create_sendable_data(), return the header components of that pdata
+# Given a ready piece of data created by create_sendable_data(), return the header components of that data
 def parse_header_from_data(data: bytes):
     header = data[:HEADER_LENGTH]
     components = parse_header(header)

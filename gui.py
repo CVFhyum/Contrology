@@ -7,6 +7,7 @@ Consistency checks:
 - Make sure that for every window with a create_widgets method and a dimensions method, that dimensions is called before widget creation.
 - Make sure that every frame in a container is an attribute of it (using self.)
 - Make sure that all frames inherit from ttk.Frame
+- todo: Make sure that the scrollbar in incoming requests does not move when not active (check table for docs)
 """
 
 from functions import *
@@ -23,13 +24,13 @@ import threading as thr
 import select
 from typing import Optional, Any
 from pyperclip import copy as cc_copy
-from time import sleep
+from time import sleep, time
 from random import randint as ri
 from mss.windows import MSS
 from functools import partial
 import argon2
 
-
+t = time()
 # Global variables that can be accessed all throughout the code
 SCREEN_WIDTH, SCREEN_HEIGHT = get_resolution_of_primary_monitor()
 self_code = ""  # This client's code
@@ -43,6 +44,7 @@ controlling_connection_thread_flags = thr.Event(), FlagObject(False)
 code_flags = thr.Event(), FlagObject(False)
 remote_connection_thread_flags = {}
 remote_thread_id = 0
+logs_table_obj: Any = None
 
 
 def trackvar():
@@ -157,68 +159,73 @@ class WindowManager:
 
 
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
-# This thread takes care of receiving incoming pdata from the server and loading it into incoming_data
+# This thread takes care of receiving incoming data from the server and loading it into incoming_data
 def handle_general_connection(c: socket.socket):
     # todo - move lines from here to connection_status condition statement into try_to_connect - if the client gets INITIAL_DENY main screen should not be open!
     global self_code, connected, accept_data, remote_thread_id
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
     ic(self_code)
-    # If the initialisation header that was sent by the server has extra pdata, raise this error
+    # If the initialisation header that was sent by the server has extra data, raise this error
     if data_length > 0:
         raise Exception(f"Extra data was sent on initialisation {data_length}")
     if connection_status == "INITIAL_ACCEPT":
         # c.setblocking(False)
         while accept_data:
             try:
-                # This thread should not block, so pdata is read asynchronously
+                # This thread should not block, so data is read asynchronously
                 ready = select.select([c],[],[], 0.1)
                 if ready[0]:
-                    # Receiving pdata protocol: listen for header, parse it, listen for all of pdata
+                    # Receiving data protocol: listen for header, parse it, listen for all of data
                     header = c.recv(HEADER_LENGTH)
                     if header:
                         data_length, data_type, code = parse_header(header)
                         data = recvall(c,data_length)
-                        if data_type == "CONNECT_ACCEPT":
+                        if data_type in PICKLED_DATA_TYPES:
                             data = parse_raw_data(data, pickled=True)
                         elif data_type == "IMAGE":
                             data = parse_raw_data(data, image=True)
                         else:
                             data = parse_raw_data(data)
                         if code == self_code or code == ALL_CODE:
-                            with data_handler_lock: # todo: change this lock to only use it while actually editing
-                                match data_type:
-                                    case "CONNECT_REQUEST":
-                                        requester_code, requester_hostname = data[:RECIPIENT_CODE_LENGTH],data[RECIPIENT_CODE_LENGTH:]
-                                        remote_connection_thread = thr.Thread(target=handle_remote_connection, args=(requester_code, requester_hostname, remote_thread_id))
-                                        remote_connection_thread_flags.update({remote_thread_id: (thr.Event(),FlagObject(False))})
-                                        remote_connection_thread.start()
-                                        remote_thread_id += 1
-                                    case "CONNECT_ACCEPT":
-                                        event, flag = controlling_connection_thread_flags
-                                        event.set()
-                                        flag.true()
-                                        current_remote.copy_from(data)
-                                    case "CONNECT_DENY":
-                                        event, flag = controlling_connection_thread_flags
-                                        event.set()
-                                        flag.false()
-                                    case "CODE_FOUND":
-                                        code_event, code_flag = code_flags
-                                        code_event.set()
-                                        code_flag.true()
-                                    case "CODE_NOT_FOUND":
-                                        code_event, code_flag = code_flags
-                                        code_event.set()
-                                        code_flag.false()
-                                    case "IMAGE":
+                            match data_type:
+                                case "CONNECT_REQUEST":
+                                    requester_code, requester_hostname = data[:RECIPIENT_CODE_LENGTH],data[RECIPIENT_CODE_LENGTH:]
+                                    remote_connection_thread = thr.Thread(target=handle_remote_connection, args=(requester_code, requester_hostname, remote_thread_id))
+                                    remote_connection_thread_flags.update({remote_thread_id: (thr.Event(),FlagObject(False))})
+                                    remote_connection_thread.start()
+                                    remote_thread_id += 1
+                                case "CONNECT_ACCEPT":
+                                    event, flag = controlling_connection_thread_flags
+                                    event.set()
+                                    flag.true()
+                                    current_remote.copy_from(data)
+                                case "CONNECT_DENY":
+                                    event, flag = controlling_connection_thread_flags
+                                    event.set()
+                                    flag.false()
+                                case "CODE_FOUND":
+                                    code_event, code_flag = code_flags
+                                    code_event.set()
+                                    code_flag.true()
+                                case "CODE_NOT_FOUND":
+                                    code_event, code_flag = code_flags
+                                    code_event.set()
+                                    code_flag.false()
+                                case "IMAGE":
+                                    with data_handler_lock:
                                         d_handler.set_last_image(data)
-                                    case _:
+                                case "DB_LOGS":
+                                    parsed_logs = [list(tup) for tup in data]
+                                    logs_table_obj.push_data_to_table(parsed_logs)
+                                case _:
+                                    with data_handler_lock:
                                         d_handler.insert_new_incoming_message((data_type, data))
                         else:
                             raise Exception(f"Intended code {code} didn't match with self code {self_code} or ALL_CODE {ALL_CODE}")
                     else:
                         break
-                d_handler.send_all_outgoing_data(c)
+                with data_handler_lock:
+                    d_handler.send_all_outgoing_data(c)
             except ConnectionResetError as e:
                 print(f"Something went wrong with the connection: {e}")
                 connected = False
@@ -246,14 +253,17 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
     if flag:
         my_remote_info = Remote(socket.gethostname(), self_code, SCREEN_WIDTH, SCREEN_HEIGHT)
         info_bytes = pickle.dumps(my_remote_info)
-        d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code,pickled=True))
+        with data_handler_lock:
+            d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code,pickled=True))
         with MSS() as mss_obj:
             while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.
                 screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
                 screenshot_data = create_sendable_data(screenshot_bytes, "IMAGE",controller_code)
-                d_handler.insert_new_outgoing_message(screenshot_data)
+                with data_handler_lock:
+                    d_handler.insert_new_outgoing_message(screenshot_data)
     else:
-        d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_DENY",controller_code))
+        with data_handler_lock:
+            d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_DENY",controller_code))
         del remote_connection_thread_flags[thread_name]
 
 
@@ -438,7 +448,7 @@ class LaunchScreenButtonsFrame(tk.Frame):
             ic(self.admin_password_entry_var.get())
             try:
                 ph = argon2.PasswordHasher()
-                ph.verify(admin_password, self.admin_password_entry_var.get())
+                ph.verify(ADMIN_PASSWORD,self.admin_password_entry_var.get())
                 admin_connect()
             except (argon2.exceptions.VerificationError, argon2.exceptions.InvalidHashError):
                 # todo: add wrong password label.
@@ -1010,7 +1020,6 @@ class AdminScreenTitleFrame(tk.Frame):
         super().__init__(parent)
         self.configure(highlightthickness=1, highlightbackground='green')
         self.width, self.height = int(parent.width*3/4),int(parent.height*3/20)
-        ic("title",self.width,self.height)
         self.configure(width=self.width, height=self.height)
         self.admin_logo = ImageTk.PhotoImage(Image.open("assets/admin_logo.png"))
 
@@ -1032,7 +1041,6 @@ class AdminScreenInfoFrame(tk.Frame):
         super().__init__(parent)
         self.configure(highlightthickness=1, highlightbackground='red')
         self.width, self.height = int(parent.width*1/4),int(parent.height*3/20)
-        ic("info", self.width, self.height)
         self.configure(width=self.width,height=self.height)
 
         self.dimensions()
@@ -1059,7 +1067,6 @@ class AdminScreenContentFrame(tk.Frame):
         super().__init__(parent)
         self.configure(highlightthickness=1, highlightbackground='blue')
         self.width, self.height = parent.width,int(parent.height*17/20)
-        ic("content",self.width,self.height)
         self.configure(width=self.width,height=self.height)
 
         self.dimensions()
@@ -1086,6 +1093,8 @@ class AdminScreenNotebook(ttk.Notebook):
         self.users_tab = None
         self.logs_tab_logo = ImageTk.PhotoImage(Image.open("assets/logs_icon.png"))
         self.users_tab_logo = ImageTk.PhotoImage(Image.open("assets/users_icon.png"))
+        self.loaded_initial_logs = False
+        self.loaded_initial_users = False
 
         self.dimensions()
         self.create_widgets()
@@ -1097,7 +1106,26 @@ class AdminScreenNotebook(ttk.Notebook):
         self.add(self.logs_tab, text="Logs", image=self.logs_tab_logo, compound='left')
         self.add(self.users_tab, text="Users", image=self.users_tab_logo, compound='left')
 
+        self.bind("<<NotebookTabChanged>>", self.on_tab_change)
+
         self.select(self.logs_tab)
+
+    def on_tab_change(self,event):
+        if not self.loaded_initial_logs or not self.loaded_initial_users:
+            notebook = event.widget
+            selected_tab = notebook.select()
+            new_tab = notebook.tab(selected_tab,"text")
+            match new_tab:
+                case "Logs":
+                    if not self.loaded_initial_logs:
+                        with data_handler_lock:
+                            d_handler.insert_new_outgoing_message(create_sendable_data(b"", "DB_LOGS_REQUEST", SERVER_CODE))
+                case "Users":
+                    if not self.loaded_initial_users:
+                        with data_handler_lock:
+                            d_handler.insert_new_outgoing_message(create_sendable_data(b"", "DB_USERS_REQUEST", SERVER_CODE))
+                case _:
+                    raise Exception("Switched to unfamiliar tab")
 
     def dimensions(self):
         pass
@@ -1105,7 +1133,7 @@ class AdminScreenNotebook(ttk.Notebook):
 # This frame takes up the entire space of the Logs tab in the Admin Notebook.
 # This frame encapsulates two frames.
 # The first frame contains the scrollable canvas which contains a canvas and a scrollbar.
-# This canvas contains the table of pdata.
+# This canvas contains the table of data.
 # The second frame is the suite of options that be committed on the Logs table.
 class AdminScreenNotebookLogs(ttk.Frame):
     def __init__(self, parent):
@@ -1117,7 +1145,7 @@ class AdminScreenNotebookLogs(ttk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
-        scrollable_table_frame = ScrollableTableFrame(self)
+        scrollable_table_frame = ScrollableTableFrame(self, "Logs")
         scrollable_table_frame.pack(side="left", fill="both", expand=True)
         options = OptionsFrame(self)
         options.pack(side="right", fill="y")
@@ -1126,30 +1154,37 @@ class AdminScreenNotebookLogs(ttk.Frame):
         pass
 
 class ScrollableTableFrame(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, table_name):
         super().__init__(parent)
         self.parent = parent
+        self.table_name = table_name
         self.configure(highlightthickness=1, highlightbackground='purple')
+
 
         self.dimensions()
         self.create_widgets()
 
     def create_widgets(self):
-        scrollable_table_canvas = ScrollableTable(parent=self)
+        scrollable_table_canvas = ScrollableTableCanvas(parent=self, table_name=self.table_name)
 
     def dimensions(self):
         pass
 
 
-class ScrollableTable(tk.Canvas):
-    def __init__(self, *, parent):
+class ScrollableTableCanvas(tk.Canvas):
+    def __init__(self, *, parent, table_name):
+        global logs_table_obj
         super().__init__(parent)
         self.parent = parent
+        self.table_name = table_name
         self.configure(highlightthickness=0)
         idata = []
         for i in range(100):
             idata.append(gen_random_record())
-        self.scrollable_frame = Table(self, ["ID", "Timestamp", "U.ID", "U.Hostname", "Action", "TU.ID", "TU.Hostname"], idata)
+        self.scrollable_frame = Table(self, ["ID", "Timestamp", "U.ID", "U.Hostname", "Action", "TU.ID", "TU.Hostname"], [])
+        match table_name:
+            case "Logs":
+                logs_table_obj = self.scrollable_frame
 
         self.create_window((0,0), window=self.scrollable_frame, anchor="nw")
         self.scrollable_frame.bind("<Configure>", self.on_frame_configure)
@@ -1215,17 +1250,19 @@ class DataFrame(tk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
-        for idx, column in enumerate(self.data):
-            column = tk.Label(self, text=column, highlightthickness=1, highlightbackground="black", font=consolas(16))
-            column.grid(row=0,column=idx)
-            self.data_label_widgets.append(column)
+        for idx, datum in enumerate(self.data):
+            datum = tk.Label(self, text=str(datum), highlightthickness=1, highlightbackground="black", font=consolas(16))
+            datum.grid(row=0,column=idx)
+            self.data_label_widgets.append(datum)
 
     def dimensions(self):
         pass
 
 class Table(tk.Frame):
     def __init__(self, parent, column_headings: list[str], initial_data: list[list[str]]):
+        print(f"table init at {time()-t}")
         super().__init__(parent)
+        self.parent = parent
         self.configure(highlightthickness=1, highlightbackground='green')
         self.columns_frame = None
         self.data_frames = []
@@ -1233,7 +1270,6 @@ class Table(tk.Frame):
         self.initial_data = initial_data
         self.dimensions()
         self.create_widgets()
-        self.bind_all('s', lambda e: self.push_data_to_table([gen_random_record()]))
 
     def create_widgets(self):
         self.columns_frame = ColumnsFrame(self, self.column_headings)
@@ -1261,7 +1297,6 @@ class Table(tk.Frame):
                 for label in data_frame.data_label_widgets]
             for data_frame in self.data_frames]
         data_labels_width.insert(0,columns_labels_width)
-        #ic(data_labels_width)
 
         # Find the maximum width value of each column and return it
         required_widths = [max(widths) for widths in transpose(data_labels_width)]
@@ -1276,12 +1311,14 @@ class Table(tk.Frame):
                 label.configure(width=required_widths[col_idx])
 
     def push_data_to_table(self, data: list[list[str]]):
+        print(f"pushing data at {time()-t}")
         for idx, datum in enumerate(data):
             data_frame = DataFrame(self, datum)
             data_frame.grid(row=len(self.data_frames)+1, column=0, sticky='ew')
             self.data_frames.append(data_frame)
-            bind_to_hierarchy(data_frame,"<Button-1>",lambda e,df=data_frame: self.remove_data_from_table(df))
-        self.reload_table_data()
+            bind_to_hierarchy(data_frame,"<MouseWheel>",self.parent.on_mouse_wheel)
+        self.set_labels_to_highest_width()
+        print(f"finished pushing data at {time()-t}")
 
     def remove_data_from_table(self, data_frame: DataFrame):
         data_frame.grid_forget()
@@ -1289,12 +1326,14 @@ class Table(tk.Frame):
         self.reload_table_data()
 
     def reload_table_data(self):
+        print(f"reloading table at {time()-t}")
         # todo: if columns need reloading too, do that here
         for data_frame in self.data_frames:
             data_frame.grid_forget()
         for idx, data_frame in enumerate(self.data_frames):
             data_frame.grid(row=idx+1, column=0, sticky='ew')
         self.set_labels_to_highest_width()
+
 
 
 
