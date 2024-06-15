@@ -3,7 +3,7 @@ from tkinter import ttk,messagebox
 from PIL import Image,ImageTk
 from functions import get_geometry_string  # Assume this function is defined in functions.py
 
-# Placeholder data
+# Placeholder pdata
 logs = [
     "2024-06-12 10:15:32 - User1 connected",
     "2024-06-12 10:17:45 - User2 connected",

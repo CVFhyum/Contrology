@@ -6,6 +6,7 @@ Consistency checks:
 - Make sure that all functions have type hints
 - Make sure that for every window with a create_widgets method and a dimensions method, that dimensions is called before widget creation.
 - Make sure that every frame in a container is an attribute of it (using self.)
+- Make sure that all frames inherit from ttk.Frame
 """
 
 from functions import *
@@ -27,6 +28,7 @@ from random import randint as ri
 from mss.windows import MSS
 from functools import partial
 import argon2
+
 
 # Global variables that can be accessed all throughout the code
 SCREEN_WIDTH, SCREEN_HEIGHT = get_resolution_of_primary_monitor()
@@ -155,23 +157,23 @@ class WindowManager:
 
 
 # When the "Launch App" button is pressed, and a connection is established, this function starts in a thread.
-# This thread takes care of receiving incoming data from the server and loading it into incoming_data
+# This thread takes care of receiving incoming pdata from the server and loading it into incoming_data
 def handle_general_connection(c: socket.socket):
     # todo - move lines from here to connection_status condition statement into try_to_connect - if the client gets INITIAL_DENY main screen should not be open!
     global self_code, connected, accept_data, remote_thread_id
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
     ic(self_code)
-    # If the initialisation header that was sent by the server has extra data, raise this error
+    # If the initialisation header that was sent by the server has extra pdata, raise this error
     if data_length > 0:
         raise Exception(f"Extra data was sent on initialisation {data_length}")
     if connection_status == "INITIAL_ACCEPT":
         # c.setblocking(False)
         while accept_data:
             try:
-                # This thread should not block, so data is read asynchronously
+                # This thread should not block, so pdata is read asynchronously
                 ready = select.select([c],[],[], 0.1)
                 if ready[0]:
-                    # Receiving data protocol: listen for header, parse it, listen for all of data
+                    # Receiving pdata protocol: listen for header, parse it, listen for all of pdata
                     header = c.recv(HEADER_LENGTH)
                     if header:
                         data_length, data_type, code = parse_header(header)
@@ -295,25 +297,13 @@ def on_main_close():
 # logo32 = ImageTk.PhotoImage(Image.open("assets/Logo32.png"))
 
 
-# Generates a tkinter-formatted consolas font at a desired size. Made for code readability.
-def consolas(size: int):
-    return "Consolas", size
 
-# https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/ttk-style-layer.html
-# Makes a style that has the consolas font for a specific widget at a desired size
-# Returns the string of the style name
-def apply_consolas_to_widget(widget_type: str, size: int, colour: Optional[str] = None) -> str:
-    s = ttk.Style()
-    style_string = f'{size}{colour}.T{widget_type}'
-    s.configure(style_string, font=consolas(size))
-    if colour is not None:
-        s.configure(style_string, foreground=colour)
-    return style_string
 
 
 class LaunchScreen(tk.Tk):
     # Main setup
     def __init__(self):
+
         # Simple configuration and variable loading
         super().__init__()
         self.title("Launch - Contrology")
@@ -445,7 +435,7 @@ class LaunchScreenButtonsFrame(tk.Frame):
         # When Enter is pressed while the password entry has focus, this callback is invoked. It verifies the password and TODO: tells the w_manager to open the admin screen.
         def admin_password_entry_handle_enter(_=None):
             # todo: handle the entered password (verify it)
-            print(self.admin_password_entry_var.get())
+            ic(self.admin_password_entry_var.get())
             try:
                 ph = argon2.PasswordHasher()
                 ph.verify(admin_password, self.admin_password_entry_var.get())
@@ -844,7 +834,7 @@ class RequestFrame(ttk.Frame):
         wm.open_share_screen()
 
 
-# Frame that acts as a separator between RequestFrame's/
+# Frame that acts as a separator between RequestFrame's
 class SeparatorFrame(tk.Frame):
     def __init__(self, parent, width, colour):
         super().__init__(parent)
@@ -976,6 +966,7 @@ class ShareScreenCanvasFrame(ttk.Frame):
         pass
 
     def load_latest_image(self):
+        # todo: add checks to make sure that the remote is still connected
         while accept_data and connected:
             with data_handler_lock:
                 new_image = d_handler.get_last_image()
@@ -995,7 +986,7 @@ class AdminScreen(tk.Tk):
         # Complex configuration
         self.width, self.height = 1200, 800
         self.geometry(get_geometry_string(self.width, self.height))
-        self.resizable(False, False)
+        #self.resizable(False, False)
         self.protocol("WM_DELETE_WINDOW",on_main_close)
 
         # Widgets
@@ -1006,6 +997,7 @@ class AdminScreen(tk.Tk):
         self.title_frame.grid(row=0,column=0)
         self.info_frame.grid(row=0,column=1)
         self.content_frame.grid(row=1,column=0,columnspan=2)
+        self.update_idletasks()
 
         # Functions
         self.dimensions()
@@ -1018,6 +1010,7 @@ class AdminScreenTitleFrame(tk.Frame):
         super().__init__(parent)
         self.configure(highlightthickness=1, highlightbackground='green')
         self.width, self.height = int(parent.width*3/4),int(parent.height*3/20)
+        ic("title",self.width,self.height)
         self.configure(width=self.width, height=self.height)
         self.admin_logo = ImageTk.PhotoImage(Image.open("assets/admin_logo.png"))
 
@@ -1037,8 +1030,9 @@ class AdminScreenTitleFrame(tk.Frame):
 class AdminScreenInfoFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.configure(highlightthickness=1, highlightbackground='green')
+        self.configure(highlightthickness=1, highlightbackground='red')
         self.width, self.height = int(parent.width*1/4),int(parent.height*3/20)
+        ic("info", self.width, self.height)
         self.configure(width=self.width,height=self.height)
 
         self.dimensions()
@@ -1060,10 +1054,12 @@ class AdminScreenInfoFrame(tk.Frame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_propagate(False)
 
-class AdminScreenContentFrame(ttk.Frame):
+class AdminScreenContentFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.width, self.height = parent.width, int(parent.height*17/20)
+        self.configure(highlightthickness=1, highlightbackground='blue')
+        self.width, self.height = parent.width,int(parent.height*17/20)
+        ic("content",self.width,self.height)
         self.configure(width=self.width,height=self.height)
 
         self.dimensions()
@@ -1071,17 +1067,15 @@ class AdminScreenContentFrame(ttk.Frame):
 
     def create_widgets(self):
         notebook = AdminScreenNotebook(self)
-
-        notebook.grid(row=0,column=0)
+        notebook.pack(fill="both",expand=True)
 
     def dimensions(self):
-        self.grid_propagate(False)
+        self.pack_propagate(False)
 
 class AdminScreenNotebook(ttk.Notebook):
     def __init__(self, parent):
         super().__init__(parent)
-        self.width, self.height = parent.width, parent.height
-        self.configure(width=self.width, height=self.height)
+        self.parent = parent
         style = ttk.Style()
         style.configure("TNotebook.Tab", font=consolas(14))
         style.map("TNotebook.Tab", foreground=[("!selected", "grey")])
@@ -1108,12 +1102,212 @@ class AdminScreenNotebook(ttk.Notebook):
     def dimensions(self):
         pass
 
+# This frame takes up the entire space of the Logs tab in the Admin Notebook.
+# This frame encapsulates two frames.
+# The first frame contains the scrollable canvas which contains a canvas and a scrollbar.
+# This canvas contains the table of pdata.
+# The second frame is the suite of options that be committed on the Logs table.
 class AdminScreenNotebookLogs(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.width, self.height = parent.width, parent.height
-        self.configure(width=self.width, height=self.height)
+        self.parent = parent
+        self.update_idletasks()
 
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        scrollable_table_frame = ScrollableTableFrame(self)
+        scrollable_table_frame.pack(side="left", fill="both", expand=True)
+        options = OptionsFrame(self)
+        options.pack(side="right", fill="y")
+
+    def dimensions(self):
+        pass
+
+class ScrollableTableFrame(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.configure(highlightthickness=1, highlightbackground='purple')
+
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        scrollable_table_canvas = ScrollableTable(parent=self)
+
+    def dimensions(self):
+        pass
+
+
+class ScrollableTable(tk.Canvas):
+    def __init__(self, *, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.configure(highlightthickness=0)
+        idata = []
+        for i in range(100):
+            idata.append(gen_random_record())
+        self.scrollable_frame = Table(self, ["ID", "Timestamp", "U.ID", "U.Hostname", "Action", "TU.ID", "TU.Hostname"], idata)
+
+        self.create_window((0,0), window=self.scrollable_frame, anchor="nw")
+        self.scrollable_frame.bind("<Configure>", self.on_frame_configure)
+
+        self.yscrollbar = ttk.Scrollbar(parent, orient="vertical", command=self.yview)
+        self.configure(yscrollcommand=self.yscrollbar.set)
+        self.xscrollbar = ttk.Scrollbar(parent, orient="horizontal", command=self.xview)
+        self.configure(xscrollcommand=self.xscrollbar.set)
+
+        self.yscrollbar.pack(side="right",fill="y")
+        self.xscrollbar.pack(side="bottom",fill="x")
+        self.pack(side="left",fill="both",expand=True)
+
+
+        # Bind mouse wheel events
+        bind_to_hierarchy(self, "<MouseWheel>", self.on_mouse_wheel)
+        # self.bind("<MouseWheel>", self.on_mouse_wheel)  # Windows
+        self.bind("<Button-4>", self.on_mouse_wheel)  # Linux
+        self.bind("<Button-5>", self.on_mouse_wheel)  # Linux
+
+    def on_frame_configure(self, event):
+        self.configure(scrollregion=self.bbox("all"))
+
+    def on_mouse_wheel(self, event):
+        # Only scroll if the scrollbar is active (-> there is actually content to scroll)
+        if "disabled" not in self.yscrollbar.state():
+            # For Windows and macOS
+            if event.delta:
+                self.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            # For Linux (event.num is used instead of event.delta)
+            elif event.num == 4:
+                self.yview_scroll(-1, "units")
+            elif event.num == 5:
+                self.yview_scroll(1, "units")
+
+class ColumnsFrame(tk.Frame):
+    def __init__(self, parent, columns: list[str]):
+        super().__init__(parent)
+        self.parent = parent
+        self.columns = columns
+        self.column_label_widgets: list[tk.Label] = []
+        #self.configure(highlightthickness=1, highlightbackground='red')
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        for idx, column in enumerate(self.columns):
+            column = tk.Label(self, text=column, highlightthickness=1, highlightbackground="black",font=consolas(16) + ("bold",))
+            column.grid(row=0,column=idx)
+            self.column_label_widgets.append(column)
+
+    def dimensions(self):
+        self.grid_propagate()
+
+class DataFrame(tk.Frame):
+    def __init__(self, parent, data: list[str]):
+        super().__init__(parent)
+        self.parent = parent
+        self.data = data
+        self.data_label_widgets = []
+        #self.configure(highlightthickness=1, highlightbackground='blue')
+        self.dimensions()
+        self.create_widgets()
+
+    def create_widgets(self):
+        for idx, column in enumerate(self.data):
+            column = tk.Label(self, text=column, highlightthickness=1, highlightbackground="black", font=consolas(16))
+            column.grid(row=0,column=idx)
+            self.data_label_widgets.append(column)
+
+    def dimensions(self):
+        pass
+
+class Table(tk.Frame):
+    def __init__(self, parent, column_headings: list[str], initial_data: list[list[str]]):
+        super().__init__(parent)
+        self.configure(highlightthickness=1, highlightbackground='green')
+        self.columns_frame = None
+        self.data_frames = []
+        self.column_headings = column_headings
+        self.initial_data = initial_data
+        self.dimensions()
+        self.create_widgets()
+        self.bind_all('s', lambda e: self.push_data_to_table([gen_random_record()]))
+
+    def create_widgets(self):
+        self.columns_frame = ColumnsFrame(self, self.column_headings)
+        self.columns_frame.grid(row=0,column=0,sticky='ew')
+        self.push_data_to_table(self.initial_data)
+
+    def req_label_table(self):
+        columns_labels = [label for label in self.columns_frame.column_label_widgets]
+        data_labels = [[label for label in data_frame.data_label_widgets] for data_frame in self.data_frames]
+        data_labels.insert(0,columns_labels)
+        return data_labels
+
+    # This function calculates the max width of all the columns inside the table.
+    def get_required_widths_list(self):
+        self.update_idletasks()  # Update the geometry manager to get the correct label measurements
+        # Generate a 2d list that represents the width of each label in the table, including the columns
+        # Get the length of the text in each widget, since label width is measured by characters
+        # 1 is added to all widths to add extra padding around the label so the table doesn't look compressed
+        columns_labels_width = [
+            len(label.cget("text")) + 1
+            for label in self.columns_frame.column_label_widgets]
+        data_labels_width = [
+            [
+                len(label.cget("text")) + 1
+                for label in data_frame.data_label_widgets]
+            for data_frame in self.data_frames]
+        data_labels_width.insert(0,columns_labels_width)
+        #ic(data_labels_width)
+
+        # Find the maximum width value of each column and return it
+        required_widths = [max(widths) for widths in transpose(data_labels_width)]
+        return required_widths
+
+    def set_labels_to_highest_width(self):
+        required_widths = self.get_required_widths_list()
+        label_table = self.req_label_table()
+        transposed_label_table = transpose(label_table)
+        for col_idx, column_labels in enumerate(transposed_label_table):
+            for label in column_labels:
+                label.configure(width=required_widths[col_idx])
+
+    def push_data_to_table(self, data: list[list[str]]):
+        for idx, datum in enumerate(data):
+            data_frame = DataFrame(self, datum)
+            data_frame.grid(row=len(self.data_frames)+1, column=0, sticky='ew')
+            self.data_frames.append(data_frame)
+            bind_to_hierarchy(data_frame,"<Button-1>",lambda e,df=data_frame: self.remove_data_from_table(df))
+        self.reload_table_data()
+
+    def remove_data_from_table(self, data_frame: DataFrame):
+        data_frame.grid_forget()
+        self.data_frames.remove(data_frame)
+        self.reload_table_data()
+
+    def reload_table_data(self):
+        # todo: if columns need reloading too, do that here
+        for data_frame in self.data_frames:
+            data_frame.grid_forget()
+        for idx, data_frame in enumerate(self.data_frames):
+            data_frame.grid(row=idx+1, column=0, sticky='ew')
+        self.set_labels_to_highest_width()
+
+
+
+    def dimensions(self):
+        self.grid_columnconfigure(0, weight=1)
+
+
+class OptionsFrame(tk.Frame):
+    def __init__(self,parent):
+        super().__init__(parent)
+        self.width = int(parent.parent.parent.width * 1/6) # the widget mentioned here is the content frame
+        self.configure(highlightthickness=1,highlightbackground='pink')
+        self.configure(width=self.width)
         self.dimensions()
         self.create_widgets()
 
@@ -1121,13 +1315,11 @@ class AdminScreenNotebookLogs(ttk.Frame):
         pass
 
     def dimensions(self):
-        pass
+        self.grid_propagate(False)
 
 class AdminScreenNotebookUsers(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.width, self.height = parent.width, parent.height
-        self.configure(width=self.width, height=self.height)
 
         self.dimensions()
         self.create_widgets()

@@ -6,6 +6,7 @@ Fetch these from the users table.
 
 import sqlite3
 import time
+from icecream import ic
 
 
 class SQLHandler:
@@ -43,11 +44,18 @@ class SQLHandler:
             self.connection.rollback()
             return None
 
-    def fetchall(self, query: str, params=None):
-        cursor = self.execute_query(query, params)
-        if cursor:
-            return cursor.fetchall()
-        return []
+    def fetch_data_generator(self,query: str,params=None,chunk_size=75):
+        cursor = self.execute_query(query,params)
+        while True:
+            rows = cursor.fetchmany(chunk_size)
+            if not rows:
+                break
+            yield rows
+
+
+    def fetchall(self, query: str, params=None, chunk_size=75):
+        for rows in self.fetch_data_generator(query, params, chunk_size):
+            yield rows
 
     def fetchone(self, query: str, params=None):
         cursor = self.execute_query(query, params)
@@ -145,6 +153,10 @@ class SQLHandler:
         """
         params = (timestamp,user_id,user_hostname,action,target_user_id,target_user_hostname)
         self.execute_query(query,params)
+
+    def get_all_logs(self):
+        query = "SELECT * FROM logs"
+        return self.fetchall(query)
 
 
 

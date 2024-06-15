@@ -32,15 +32,15 @@ def handle_sock_closing(closing_sock: socket.socket):
     clients.remove(closing_sock)
     closing_sock.close()
 
-# When the server detects data incoming from an existing socket, this function is called.
-# This function listens out for headers, and uses those to listen to data that is later resent.
+# When the server detects pdata incoming from an existing socket, this function is called.
+# This function listens out for headers, and uses those to listen to pdata that is later resent.
 def handle_client(sock: socket.socket):
     try:
         header = sock.recv(HEADER_LENGTH)  # Receive the header
         data_length, data_type, code = parse_header(header)  # Parse the header
-        data = recvall(sock,data_length)  # Receive all the data
+        data = recvall(sock,data_length)  # Receive all the pdata
         if data_type == "CONNECT_ACCEPT":
-            data = parse_raw_data(data, pickled=True)  # Parse the data
+            data = parse_raw_data(data, pickled=True)  # Parse the pdata
         elif data_type == "IMAGE":
             data = parse_raw_data(data, image=True)
         else:
@@ -48,10 +48,7 @@ def handle_client(sock: socket.socket):
         ic(len(data), data_length)
         ic(data_type, code)
         # TODO: handle messages that are meant for the server
-
-        # TODO: rethink way of handling request packets and sending a not_found packet back.
-        # TODO: maybe make message handler read the code from the header and then it wont need to be a dictionary
-        # TODO: maybe make a function to handle different data types and what we need to do with them
+        # TODO: maybe make a function to handle different pdata types and what we need to do with them
         sender_info = db_handler.get_user_info(user_id=new_client_ids[sock])
         target_info = db_handler.get_user_info(code=code)
         if not db_handler.code_exists(code):
@@ -61,8 +58,8 @@ def handle_client(sock: socket.socket):
 
             match data_type:
                 case "CONNECT_REQUEST":  # Controller --> Remote
-                    # The data should be {code}{hostname} (both of the controller so the remote knows)
-                    # todo: change this to a UserInfo class
+                    # The pdata should be {code}{hostname} (both of the controller so the remote knows)
+                    # todo: change this to a UserInfo class ^^^
                     data = f"{sender_info['code']}{get_bare_hostname(sock.getpeername()[0])}"
                     data = data.encode('utf-8')
                     data = create_sendable_data(data, data_type, code)
@@ -70,7 +67,7 @@ def handle_client(sock: socket.socket):
                                    user_hostname=sender_info['hostname'],
                                    action="REQUEST",
                                    target_user_id=target_info['id'],
-                                   target_user_hostname=['hostname'])
+                                   target_user_hostname=target_info['hostname'])
                 case "CONNECT_ACCEPT":  # Remote --> Controller
                     data = pickle.dumps(data)
                     data = create_sendable_data(data, data_type, code, pickled=True)
@@ -78,20 +75,20 @@ def handle_client(sock: socket.socket):
                                    user_hostname=sender_info['hostname'],
                                    action="ACCEPT_REQUEST",
                                    target_user_id=target_info['id'],
-                                   target_user_hostname=['hostname'])
+                                   target_user_hostname=target_info['hostname'])
                 case "CONNECT_DENY":  # Remote --> Controller
-                    data = data.encode('utf-8')  # Encode the data
-                    data = create_sendable_data(data,data_type,code)  # Wrap the data so it's ready to be resent
+                    data = data.encode('utf-8')  # Encode the pdata
+                    data = create_sendable_data(data,data_type,code)  # Wrap the pdata so it's ready to be resent
                     db_handler.log(user_id=sender_info['id'],
                                    user_hostname=sender_info['hostname'],
                                    action="DENY_REQUEST",
                                    target_user_id=target_info['id'],
-                                   target_user_hostname=['hostname'])
+                                   target_user_hostname=target_info['hostname'])
                 case "IMAGE":
                     data = create_sendable_data(data, data_type, code)
                 case _:
-                    data = data.encode('utf-8')  # Encode the data
-                    data = create_sendable_data(data, data_type, code) # Wrap the data so it's ready to be resent
+                    data = data.encode('utf-8')  # Encode the pdata
+                    data = create_sendable_data(data, data_type, code) # Wrap the pdata so it's ready to be resent
         m_handler.add(data)
     except Exception as e:
         print(f"Error handling socket: {e}") # todo: remove this
@@ -140,7 +137,7 @@ def main():
                     clients.append(client)
                     print(f"[{get_hhmmss()}] Client Connected | {get_bare_hostname(addr[0])} | {addr} | {new_code}")
 
-                else:  # Incoming data from existing client, so handle them
+                else:  # Incoming pdata from existing client, so handle them
                     handle_client(sock)
             # End
             m_handler.send_all(new_client_ids)

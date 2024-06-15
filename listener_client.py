@@ -8,7 +8,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as c:
     c.connect((SERVER_IP, SERVER_PORT))
     data_length,connection_status,self_code = parse_header(c.recv(HEADER_LENGTH))
     if data_length > 0:
-        raise Exception("Extra data was sent on initialisation")
+        raise Exception("Extra pdata was sent on initialisation")
     if connection_status == "INITIAL_ACCEPT":
         ic(self_code)
         while True:

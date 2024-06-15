@@ -6,17 +6,17 @@ from icecream import ic
 
 class DataHandler:
     def __init__(self):
-        # Incoming data queue -> Tuples of data -> (data type, data)
-        # Outgoing data queue -> Ready data (with headers)
+        # Incoming pdata queue -> Tuples of pdata -> (pdata type, pdata)
+        # Outgoing pdata queue -> Ready pdata (with headers)
         self.incoming_data_queue: list = []
         self.outgoing_data_queue: list = []
         self.last_image_received = None
 
-    # Insert data as a tuple (data type, data)
+    # Insert pdata as a tuple (pdata type, pdata)
     def insert_new_incoming_message(self, data: tuple[str, str]):
         self.incoming_data_queue.append(data)
 
-    # Insert data as "ready data" (with a header)
+    # Insert pdata as "ready pdata" (with a header)
     def insert_new_outgoing_message(self, data: bytes):
         self.outgoing_data_queue.append(data)
 

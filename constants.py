@@ -1,4 +1,4 @@
-from string import ascii_lowercase, ascii_uppercase, digits
+from string import digits
 
 # Header info
 DATA_LENGTH_LENGTH = 20
@@ -16,3 +16,5 @@ ALL_CODE = "9999999999"
 
 # Admin Password
 admin_password = "$argon2id$v=19$m=65536,t=3,p=4$i+nKuV7LawQnB8LogY5NkQ$640d6+UiGUR704021yy4mrREDQPD4DLfSzCIhQ1DlWE"
+
+

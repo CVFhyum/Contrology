@@ -1,3 +1,7 @@
+"""
+Change all functions here to include docstrings instead of comments.
+"""
+
 import tkinter as tk
 import zlib
 import screeninfo
@@ -8,12 +12,13 @@ from icecream import ic
 import random as r
 from PIL import Image, ImageTk
 import socket
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from mss.windows import MSS
 import threading as thr
-from time import sleep
+import time
 import pickle
 from sql_handler import SQLHandler
+from tkinter import ttk
 
 # With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
 def get_geometry_string(window_width: int, window_height: int) -> str:
@@ -30,17 +35,17 @@ def get_resolution_of_primary_monitor() -> tuple[int,int]:
 
 # Given a socket and a constant length, receive exactly length bytes from that socket and return them.
 # Used always, recv() is only used for receiving initial headers.
-# The point is to make sure no data gets lost because of data being bigger than the maximum recv() limit.
+# The point is to make sure no pdata gets lost because of pdata being bigger than the maximum recv() limit.
 def recvall(sock: socket.socket, length: int) -> bytes:
     buffer = b''
     while len(buffer) < length: # Since we keep adding to buffer, we will continue if it hasn't surpassed the desired length
         data = sock.recv(length - len(buffer))
-        if not data: # Client disconnected during data receipt?
-            raise Exception("Error occurred while trying to receive data")
+        if not data: # Client disconnected during pdata receipt?
+            raise Exception("Error occurred while trying to receive pdata")
         buffer += data
     return buffer
 
-# Takes care of attaching a header and compressing the data
+# Takes care of attaching a header and compressing the pdata
 def create_sendable_data(data: bytes, data_type: str, recipient_code: str, pickled=False) -> bytes:
     if not pickled:
         if len(data) != 0:
@@ -48,7 +53,7 @@ def create_sendable_data(data: bytes, data_type: str, recipient_code: str, pickl
     data_header = Header(len(data), data_type, recipient_code)
     return data_header.get_header_bytes() + data
 
-# Given a header, parse it into its components (data length, data type, recipient code) and return them.
+# Given a header, parse it into its components (pdata length, pdata type, recipient code) and return them.
 def parse_header(header: bytes) -> tuple[int, str, str]:
     header = header.decode('utf-8', 'ignore')
     data_length = int(header[:DATA_LENGTH_LENGTH])
@@ -62,7 +67,7 @@ def parse_header(header: bytes) -> tuple[int, str, str]:
     return data_length, data_type, recipient_code
 
 
-# Takes care of decompressing, depickling, and decoding the data
+# Takes care of decompressing, depickling, and decoding the pdata
 def parse_raw_data(data: bytes, pickled=False, image=False) -> Union[str, bytes]:
     if pickled:
         return pickle.loads(data)
@@ -72,7 +77,7 @@ def parse_raw_data(data: bytes, pickled=False, image=False) -> Union[str, bytes]
         return data
     return data.decode('utf-8', 'ignore')
 
-# Given a ready piece of data created by create_sendable_data(), return the header components of that data
+# Given a ready piece of pdata created by create_sendable_data(), return the header components of that pdata
 def parse_header_from_data(data: bytes):
     header = data[:HEADER_LENGTH]
     components = parse_header(header)
@@ -87,7 +92,7 @@ def get_hhmmss():
 def generate_code(db_handler: SQLHandler) -> str:
     while True:
         new_code = ''.join(r.choice(CODE_CHARACTER_POOL) for _ in range(RECIPIENT_CODE_LENGTH))  # Adjust length as needed
-        if not db_handler.is_code_exists(new_code):
+        if not db_handler.code_exists(new_code):
             return new_code
 
 def get_resized_image(image_path: str, size: Union[tuple[int,int], int]) -> ImageTk.PhotoImage:
@@ -114,6 +119,7 @@ def get_bare_hostname(ip_addr: str) -> str:
 def get_code_from_sock(client_ids: Dict[str, socket.socket], sock: socket.socket):
     return list(client_ids.keys())[list(client_ids.values()).index(sock)]
 
+# todo: move to classes.py
 class FlagObject:
     def __init__(self, flag):
         self.flag = flag
@@ -153,11 +159,50 @@ def get_screenshot_bytes(mss_object: MSS, top, left, width, height):
     return screenshot_bytes
 
 # This function takes a StringVar, changes it to new_text, then waits wait_seconds, before changing it back to old_text.
+# todo: use .after instead of this
 def set_temporary_message(var: tk.StringVar, old_text: str, new_text: str, wait_seconds: float):
     if thr.current_thread() is thr.main_thread():
         thr.Thread(target=set_temporary_message, args=(var, new_text, wait_seconds, old_text)).start()
     else:
         var.set(new_text)
-        sleep(wait_seconds)
+        time.sleep(wait_seconds)
         var.set(old_text)
 
+def bind_to_hierarchy(widget: tk.BaseWidget, binding, callback):
+    widget.bind(binding, callback)
+    children = widget.winfo_children()
+    for child in children:
+        bind_to_hierarchy(child, binding, callback)
+
+# Generates a tkinter-formatted consolas font at a desired size. Made for code readability.
+def consolas(size: int):
+    return "Consolas", size
+
+# https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/ttk-style-layer.html
+# Makes a style that has the consolas font for a specific widget at a desired size
+# Returns the string of the style name
+def apply_consolas_to_widget(widget_type: str, size: int, colour: Optional[str] = None) -> str:
+    s = ttk.Style()
+    style_string = f'{size}{colour}.T{widget_type}'
+    s.configure(style_string, font=consolas(size))
+    if colour is not None:
+        s.configure(style_string, foreground=colour)
+    return style_string
+
+# This function transposes a matrix (switches between the rows and the columns
+# zip(*matrix) passes all the 1d lists into zip, making a tuple of the first elements, the second elements, etc.
+# map(list, zip(*matrix)) converts all these new tuples into lists (by mapping the function list on every iterable)
+# list(...) converts the iterator made by map into a list, effectively creating a 2d list
+def transpose(matrix):
+    return list(map(list, zip(*matrix)))
+
+# test
+def gen_random_record():
+    id_num = str(r.randint(1, 1000))
+    timestamp = str(int(time.time()))
+    user_id = str(r.randint(1, 1000))
+    user_hostname = f"PC-{r.randint(1, 999)}"
+    action = r.choice(["CONNECTION", "DISCONNECTION"])
+    target_user_id = str(r.randint(1, 1000))
+    target_hostname = f"PC-{r.randint(1, 999)}"
+    return [id_num, timestamp, user_id, user_hostname, action, target_user_id, target_hostname]
