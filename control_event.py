@@ -48,13 +48,10 @@ class ControlEvent:
 
     @property
     def key(self):
-        return self._keypress
+        return self._key
 
     @key.setter
     def key(self,value):
-        ic(f"keysetter called", value)
-        ic(self.keypress)
-        ic(not self.keypress and value)
         if not self.keypress and value:
             raise ValueError("A key could not be assigned because ControlEvent is not a keypress")
         self._key = value
@@ -66,7 +63,6 @@ class ControlEvent:
             x,y = self.coordinates
             pag.click(x,y)
         if self.keypress:
-            ic(self.key)
             pag.press(self.key)
 
     def __repr__(self):
