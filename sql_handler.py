@@ -157,5 +157,9 @@ class SQLHandler:
         query = "SELECT * FROM logs"
         return self.fetchall(query)
 
+    def get_last_log(self):
+        query = "SELECT * FROM logs ORDER BY id DESC LIMIT 1"
+        return self.fetchone(query)
+
 
 

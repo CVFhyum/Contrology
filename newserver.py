@@ -56,7 +56,6 @@ def handle_client(sock: socket.socket):
             m_handler.add(data)
         else:
             m_handler.add(create_sendable_data(b"", "CODE_FOUND", sender_info["code"]))
-
             match data_type:
                 case "CONNECT_REQUEST":  # Controller --> Remote
                     # The data should be {code}{hostname} (both of the controller so the remote knows)
@@ -91,11 +90,14 @@ def handle_client(sock: socket.socket):
                 case "IMAGE":
                     data = create_sendable_data(data, data_type, code)
                     m_handler.add(data)
+                case "CONTROL_EVENT":
+                    data = pickle.dumps(data)
+                    data = create_sendable_data(data, data_type, code, pickled=True)
+                    m_handler.add(data)
                 case "DB_LOGS_REQUEST":
                     for chunk_of_rows in db_handler.get_all_logs():
                         pickled_chunk = pickle.dumps(chunk_of_rows)
                         m_handler.add(create_sendable_data(pickled_chunk, "DB_LOGS", sender_info["code"], pickled=True))
-                    print("sent all lol")
                 case "DB_USERS_REQUEST":
                     # todo: implement
                     pass

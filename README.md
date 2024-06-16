@@ -29,7 +29,8 @@ Pass this data into **parse_raw_data()** and you will get a string of data.
 * **CONNECT_ACCEPT** - Sent by the server to the controller to signify that controlling permission has been granted. A Remote object with useful info is in the data.
 * **CONNECT_DENY** - Sent by the remote to signify a negative response. The code of the controller is in the header.
 * **CONNECT_DENY** - Sent by the server to the controller to signify that controlling permission has been denied
-* **IMAGE** - Sent by a client that is sending image bytes that should be decoded and displayed.
+* **IMAGE** - Sent by a remote that is sending image bytes that should be decoded and displayed.
+* **CONTROL_EVENT** - Sent by a controller to a remote. The data is of type ControlEvent and describes the control the controller made, and the control the remote has to perform accordingly.
 ### Administrator requests
 * **DB_LOGS_REQUEST** - Sent by an administrator to the server when the logs tab is opened to request existing logs
 * **DB_LOGS** - Sent by the server to an administrator as a pickled list that contains tuples of data. Multiple can arrive at once to prevent large transfers.

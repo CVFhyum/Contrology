@@ -15,6 +15,7 @@ from constants import *
 from configuration import *
 from data_handler import DataHandler
 from remote import Remote
+from control_event import ControlEvent
 
 import tkinter as tk
 from tkinter import ttk
@@ -214,6 +215,8 @@ def handle_general_connection(c: socket.socket):
                                 case "IMAGE":
                                     with data_handler_lock:
                                         d_handler.set_last_image(data)
+                                case "CONTROL_EVENT":
+                                    data.execute_event()
                                 case "DB_LOGS":
                                     parsed_logs = [list(tup) for tup in data]
                                     logs_table_obj.push_data_to_table(parsed_logs)
@@ -957,6 +960,8 @@ class ShareScreenCanvasFrame(ttk.Frame):
         self.resized_width = int(self.remote.res_width * self.scale_factor)
         self.resized_height = int(self.remote.res_height * self.scale_factor)
         ic(self.resized_width, self.resized_height)
+        self.image_x_offset = (self.width-self.resized_width) // 2
+        self.image_y_offset = (self.height-self.resized_height) // 2
 
         self.dimensions()
         self.create_widgets()
@@ -966,14 +971,13 @@ class ShareScreenCanvasFrame(ttk.Frame):
 
     def create_widgets(self):
         self.canvas = tk.Canvas(self, bg="black", width=self.width, height=self.height)
-        self.canvas.pack(fill=tk.BOTH,expand=True)
+        self.canvas.pack(fill="both",expand=True)
         default_image = Image.new('RGB', (self.remote.res_width, self.remote.res_height), (0,0,0))
         default_image.resize((self.resized_width, self.resized_height), Image.Resampling.LANCZOS)
         self.display_image = ImageTk.PhotoImage(default_image)
         self.canvas_image_id = self.canvas.create_image(self.width // 2,self.height // 2,anchor="center",image=self.display_image)
-
-    def dimensions(self):
-        pass
+        self.canvas.bind("<Button-1>",self.on_canvas_event)
+        self.canvas.bind_all("<KeyPress>",self.on_canvas_event)
 
     def load_latest_image(self):
         # todo: add checks to make sure that the remote is still connected
@@ -985,6 +989,36 @@ class ShareScreenCanvasFrame(ttk.Frame):
             self.display_image = ImageTk.PhotoImage(new_image)
             self.canvas.itemconfig(self.canvas_image_id, image=self.display_image)
             self.canvas.image = self.display_image
+
+    def on_canvas_event(self, event):
+        if event.type == tk.EventType.ButtonPress:  # Mouse click
+            x, y = event.x, event.y
+            # Calculate the coordinates relative to the image
+            image_x = x - self.image_x_offset
+            image_y = y - self.image_y_offset
+
+            # Check if the click is within the image bounds
+            if 0 <= image_x < self.resized_width and 0 <= image_y < self.resized_height:
+                # Map the coordinates to the original image
+                original_x,original_y = map_coords_to_original(image_x,image_y,self.scale_factor)
+                print(f"Scaled Coordinates: ({image_x}, {image_y})")
+                print(f"Original Coordinates: ({original_x}, {original_y})")  # where the remote needs to simulate a click
+                control_event_data = ControlEvent(click=True, coordinates=(original_x, original_y))
+                control_event_data = pickle.dumps(control_event_data)
+                with data_handler_lock:
+                    d_handler.insert_new_outgoing_message(
+                        create_sendable_data(control_event_data, "CONTROL_EVENT", self.remote.code, pickled=True))
+
+        if event.type == tk.EventType.KeyPress:  # Keyboard press
+            print(event.char)
+            control_event_data = ControlEvent(keypress=True, key=event.char)
+            control_event_data = pickle.dumps(control_event_data)
+            with data_handler_lock:
+                d_handler.insert_new_outgoing_message(
+                    create_sendable_data(control_event_data,"CONTROL_EVENT",self.remote.code, pickled=True))
+
+    def dimensions(self):
+        pass
 
 
 class AdminScreen(tk.Tk):

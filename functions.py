@@ -19,6 +19,8 @@ import time
 import pickle
 from sql_handler import SQLHandler
 from tkinter import ttk
+from remote import Remote
+from control_event import ControlEvent
 
 # With a given window width and height, get geometry string with offsets to place it in the middle of the screen.
 def get_geometry_string(window_width: int, window_height: int) -> str:
@@ -68,7 +70,7 @@ def parse_header(header: bytes) -> tuple[int, str, str]:
 
 
 # Takes care of decompressing, depickling, and decoding the data
-def parse_raw_data(data: bytes, pickled=False, image=False) -> Union[str, bytes]:
+def parse_raw_data(data: bytes, pickled=False, image=False) -> Union[str, bytes, Remote, ControlEvent]:
     if pickled:
         return pickle.loads(data)
     if len(data) != 0:
@@ -206,3 +208,8 @@ def gen_random_record():
     target_user_id = str(r.randint(1, 1000))
     target_hostname = f"PC-{r.randint(1, 999)}"
     return [id_num, timestamp, user_id, user_hostname, action, target_user_id, target_hostname]
+
+def map_coords_to_original(scaled_x,scaled_y,scale_factor):
+    original_x = int(scaled_x / scale_factor)
+    original_y = int(scaled_y / scale_factor)
+    return original_x,original_y
