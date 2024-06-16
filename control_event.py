@@ -19,7 +19,7 @@ class ControlEvent:
     def click(self,value):
         if not isinstance(value, bool):
             raise ValueError("Value passed to click attribute of ControlEvent was not a boolean")
-        if self.keypress and self.click:
+        if self.keypress and value:
             raise ValueError("A keypress for this specific ControlEvent exists so a click could not be assigned.")
         self._click = value
 
@@ -29,7 +29,7 @@ class ControlEvent:
 
     @coordinates.setter
     def coordinates(self,value):
-        if not self.click:
+        if not self.click and value:
             raise ValueError("A set of coordinates could not be assigned because ControlEvent is not a click")
         self._coordinates = value
 
@@ -41,7 +41,7 @@ class ControlEvent:
     def keypress(self,value):
         if not isinstance(value,bool):
             raise ValueError("Value passed to keypress attribute of ControlEvent was not a boolean")
-        if self.click and self.keypress:
+        if self.click and value:
             raise ValueError("A click for this specific ControlEvent exists so a keypress could not be assigned.")
         self._keypress = value
 
@@ -51,7 +51,7 @@ class ControlEvent:
 
     @key.setter
     def key(self,value):
-        if not self.keypress:
+        if not self.keypress and value:
             raise ValueError("A key could not be assigned because ControlEvent is not a keypress")
         self._key = value
 
@@ -63,5 +63,8 @@ class ControlEvent:
             pag.click(x,y)
         if self.keypress:
             pag.press(self.key)
+
+    def __len__(self):
+        return 69
 
 
