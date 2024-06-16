@@ -19,7 +19,7 @@ class ControlEvent:
     def click(self,value):
         if not isinstance(value, bool):
             raise ValueError("Value passed to click attribute of ControlEvent was not a boolean")
-        if self.keypress:
+        if self.keypress and self.click:
             raise ValueError("A keypress for this specific ControlEvent exists so a click could not be assigned.")
         self._click = value
 
@@ -41,7 +41,7 @@ class ControlEvent:
     def keypress(self,value):
         if not isinstance(value,bool):
             raise ValueError("Value passed to keypress attribute of ControlEvent was not a boolean")
-        if self.click:
+        if self.click and self.keypress:
             raise ValueError("A click for this specific ControlEvent exists so a keypress could not be assigned.")
         self._keypress = value
 

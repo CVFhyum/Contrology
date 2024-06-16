@@ -40,9 +40,8 @@ class SQLHandler:
             self.connection.commit()
             return cursor
         except sqlite3.Error as e:
-            print(f"An error occurred: {e}")
             self.connection.rollback()
-            return None
+            raise Exception(f"An SQL Error occurred: {e}")
 
     def fetch_data_generator(self,query: str,params=None,chunk_size=100):
         cursor = self.execute_query(query,params)
