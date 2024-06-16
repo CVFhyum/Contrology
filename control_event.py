@@ -1,4 +1,5 @@
 import pyautogui as pag
+from icecream import ic
 
 class ControlEvent:
     def __init__(self, click: bool = False, coordinates: tuple[int, int] = None, keypress: bool = False, key:str = None):
@@ -62,6 +63,7 @@ class ControlEvent:
             x,y = self.coordinates
             pag.click(x,y)
         if self.keypress:
+            ic(self.key)
             pag.press(self.key)
 
     def __len__(self):
