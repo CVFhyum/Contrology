@@ -2,7 +2,7 @@ import pyautogui as pag
 from icecream import ic
 
 class ControlEvent:
-    def __init__(self, click: bool = False, coordinates: tuple[int, int] = None, keypress: bool = False, key:str = None):
+    def __init__(self, click: bool = False, coordinates: tuple[int, int] = None, keypress: bool = False, key: str = None):
         self._click = False
         self._coordinates = None
         self._keypress = False
@@ -52,6 +52,9 @@ class ControlEvent:
 
     @key.setter
     def key(self,value):
+        ic(f"keysetter called", value)
+        ic(self.keypress)
+        ic(not self.keypress and value)
         if not self.keypress and value:
             raise ValueError("A key could not be assigned because ControlEvent is not a keypress")
         self._key = value
@@ -65,6 +68,12 @@ class ControlEvent:
         if self.keypress:
             ic(self.key)
             pag.press(self.key)
+
+    def __repr__(self):
+        return f"ControlEvent(click={self.click}, coordinates={self.coordinates}, keypress={self.keypress}, key={self.key})"
+
+    def __str__(self):
+        return self.__repr__()
 
     def __len__(self):
         return 69

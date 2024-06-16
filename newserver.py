@@ -47,6 +47,10 @@ def handle_client(sock: socket.socket):
             data = parse_raw_data(data)
         ic(len(data), data_length)
         ic(data_type, code)
+        #test
+        if data_type == "CONTROL_EVENT":
+            ic(data)
+        #test
         # TODO: handle messages that are meant for the server
         # TODO: maybe make a function to handle different data types and what we need to do with them
         sender_info = db_handler.get_user_info(user_id=new_client_ids[sock])

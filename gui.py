@@ -1012,9 +1012,8 @@ class ShareScreenCanvasFrame(ttk.Frame):
                     ic()
 
         if event.type == tk.EventType.KeyPress:  # Keyboard press
-            print(event.char)
-            print(type(event.char))
             control_event_data = ControlEvent(keypress=True, key=event.char)
+            ic(control_event_data)
             control_event_data = pickle.dumps(control_event_data)
             with data_handler_lock:
                 d_handler.insert_new_outgoing_message(
