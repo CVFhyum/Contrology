@@ -1005,15 +1005,12 @@ class ShareScreenCanvasFrame(ttk.Frame):
                 print(f"Original Coordinates: ({original_x}, {original_y})")  # where the remote needs to simulate a click
                 control_event_data = ControlEvent(click=True, coordinates=(original_x, original_y))
                 control_event_data = pickle.dumps(control_event_data)
-                ic()
                 with data_handler_lock:
                     d_handler.insert_new_outgoing_message(
                         create_sendable_data(control_event_data, "CONTROL_EVENT", self.remote.code, pickled=True))
-                    ic()
 
         if event.type == tk.EventType.KeyPress:  # Keyboard press
             control_event_data = ControlEvent(keypress=True, key=event.char)
-            ic(control_event_data)
             control_event_data = pickle.dumps(control_event_data)
             with data_handler_lock:
                 d_handler.insert_new_outgoing_message(
