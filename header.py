@@ -1,8 +1,8 @@
 from constants import DATA_LENGTH_LENGTH, DATA_TYPE_LENGTH, RECIPIENT_CODE_LENGTH, HEADER_LENGTH
 
 # Implementation of a header. A header is always HEADER_LENGTH long
-# The pdata length is DATA_LENGTH_LENGTH long (padded with whitespaces)
-# The pdata type is DATA_TYPE_LENGTH long (padded with whitespaces)
+# The data length is DATA_LENGTH_LENGTH long (padded with whitespaces)
+# The data type is DATA_TYPE_LENGTH long (padded with whitespaces)
 # The recipient code is RECIPIENT_CODE_LENGTH long
 class Header:
     def __init__(self, data_length, data_type, recipient_code):

@@ -129,15 +129,15 @@ class SQLHandler:
         result = self.fetchone(query,(code,))
         return bool(result)
 
-    def set_user_connection_status(self,user_id: int, new_status: bool) -> None:
-        query = "UPDATE users SET is_connected = ? WHERE id = ?"
-        self.execute_query(query,(1 if new_status else 0,user_id))
-
     # Adds a user with given information and returns their new id
-    def add_user(self, *, hostname: str,address: str,code: str,is_connected: int) -> int:
+    def add_user(self,*,hostname: str,address: str,code: str,is_connected: int) -> int:
         query = "INSERT INTO users (hostname, address, code, is_connected) VALUES (?, ?, ?, ?)"
         cursor = self.execute_query(query,(hostname,address,code,is_connected))
         return cursor.lastrowid if cursor else None
+
+    def set_user_connection_status(self,user_id: int, new_status: bool) -> None:
+        query = "UPDATE users SET is_connected = ? WHERE id = ?"
+        self.execute_query(query,(1 if new_status else 0,user_id))
 
     def set_all_users_disconnected(self):
         query = "UPDATE users SET is_connected = 0"

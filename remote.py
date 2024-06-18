@@ -55,5 +55,5 @@ class Remote:
         return f"{self.hostname}, {self.code}, {self.res_width}, {self.res_height}"
 
     def __len__(self):
-        return 69
+        return 0
 

@@ -72,6 +72,6 @@ class ControlEvent:
         return self.__repr__()
 
     def __len__(self):
-        return 69
+        return 0
 
 

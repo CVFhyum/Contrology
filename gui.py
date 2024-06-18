@@ -8,6 +8,7 @@ Consistency checks:
 - Make sure that every frame in a container is an attribute of it (using self.)
 - Make sure that all frames inherit from ttk.Frame
 - todo: Make sure that the scrollbar in incoming requests does not move when not active (check table for docs)
+- Change global flags to FlagObject
 """
 
 from functions import *
@@ -16,6 +17,7 @@ from configuration import *
 from data_handler import DataHandler
 from remote import Remote
 from control_event import ControlEvent
+from classes import *
 
 import tkinter as tk
 from tkinter import ttk
@@ -496,9 +498,9 @@ class MainScreen(tk.Tk):
         self.protocol("WM_DELETE_WINDOW",on_main_close)
 
         # Widgets
-        self.top_frame = MainScreenInfoFrame(self)
-        self.middle_frame = MainScreenConnectFrame(self)
-        self.bottom_frame = MainScreenUtilitiesFrame(self)
+        self.info_frame = MainScreenInfoFrame(self)
+        self.connect_frame = MainScreenConnectFrame(self)
+        self.utilities_frame = MainScreenUtilitiesFrame(self)
 
         # Functions
         self.dimensions()
@@ -517,13 +519,11 @@ class MainScreenInfoFrame(tk.Frame):
         self.update()
 
         self.banner_trans = get_resized_image("assets/Banner_Trans.png", 0.36)
-        self.self_code = tk.StringVar()
 
         self.create_widgets()
         self.dimensions()
 
     def create_widgets(self):
-        # todo: change this using tk.after or using a thread, cannot sleep and block in a tkinter program
         def show_copied_message():
             my_code_click_to_copy_label.configure(text="Copied to Clipboard!", foreground='green')
             sleep(1)
@@ -565,9 +565,10 @@ class MainScreenConnectFrame(tk.Frame):
         self.dimensions()
 
     def create_widgets(self):
+        # todo: make it so you cant enter more than 10 characters in the entry [pretty sure theres a tkinter feature for this]
         connect_label = ttk.Label(self, text="Connect to a remote machine", font=consolas(32))
         connect_code_entry = ttk.Entry(self, textvariable=self.connect_code_var, font=consolas(32),width=10)
-        connect_button = ttk.Button(self, text="->",style=apply_consolas_to_widget('Button', 32),width=2,command=self.set_up_connection_thread)
+        connect_button = ttk.Button(self,text="->",style=apply_consolas_to_widget('Button', 32),width=2,command=self.set_up_controlling_thread)
         feedback_label = ttk.Label(self, textvariable=self.feedback_var, font=consolas(16), foreground='red')
 
         connect_label.grid(row=0,column=0,sticky='s')
@@ -580,7 +581,7 @@ class MainScreenConnectFrame(tk.Frame):
         self.rowconfigure((0,1,2), weight=1)
         self.columnconfigure(0, weight=1)
 
-    def set_up_connection_thread(self):
+    def set_up_controlling_thread(self):
         controlling_connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get(),))
         controlling_connection_thread.start()
 class MainScreenUtilitiesFrame(tk.Frame):
@@ -617,8 +618,9 @@ class MainScreenUtilitiesFrame(tk.Frame):
 class CanvasScrollbarFrame(tk.Frame):
     def __init__(self, *, parent, row, column, width_multiplier, request_type):
         super().__init__(parent)
+        self.parent = parent
         self.configure(width=parent.winfo_width()*width_multiplier)
-        self.scrollable_canvas = ScrollableCanvasWidget(parent=self,width=parent.winfo_width() * width_multiplier,request_type=request_type)
+        self.scrollable_canvas = ScrollableCanvasWidget(parent=self,width=self.parent.winfo_width() * width_multiplier,request_type=request_type)
         self.grid(row=row,column=column,sticky='nsew')
         self.update_idletasks()
         self.grid_propagate(False)
@@ -630,7 +632,8 @@ class ScrollableCanvasWidget(tk.Canvas):
         global incoming_requests_frame_obj, outgoing_requests_frame_obj
         super().__init__(parent)
         self.parent = parent
-        self.configure(width=width)
+        self.width = width
+        self.configure(width=self.width)
         self.configure(highlightthickness=0)
         match request_type:
             case "incoming":
@@ -677,7 +680,7 @@ class UtilitiesIncomingRequestsFrame(tk.Frame):
         self.configure(highlightthickness=0)
 
         self.request_frames = []
-        self.separator_frames: list[tk.Frame] = []
+        self.separator_frames: list[SeparatorFrame] = []
 
         self.create_widgets()
         self.dimensions()
@@ -853,44 +856,14 @@ class SeparatorFrame(tk.Frame):
         super().__init__(parent)
         self.parent = parent
         self.width = width
+        self.height = 1
         self.colour = colour
         self.configure(background=colour)
-        self.configure(width=width, height=1)
+        self.configure(width=self.width, height=self.height)
+        # todo: use bind to hierarchy
         self.bind("<MouseWheel>",self.parent.parent.on_mouse_wheel)  # Windows
         self.bind("<Button-4>",self.parent.parent.on_mouse_wheel)  # Linux
         self.bind("<Button-5>",self.parent.parent.on_mouse_wheel)  # Linux
-
-# Label that breaks down a gif into multiple images and displays them, seeming like a gif.
-# todo: get this out of here, possibly into a new classes.py
-class AnimatedGIF(tk.Label):
-    def __init__(self, parent, path, size=None, *args, **kwargs):
-        super().__init__(parent,*args,**kwargs)
-        self.path = path
-        self.size = size
-        self.frames = self.load_frames()
-        self.current_frame = 0
-        self._job = None
-        self.update_animation()
-
-    def load_frames(self):
-        frames = []
-        gif = Image.open(self.path)
-        for frame in ImageSequence.Iterator(gif):
-            if self.size is not None:
-                frame = frame.resize(self.size, Image.Resampling.LANCZOS)
-            frames.append(ImageTk.PhotoImage(frame))
-        return frames
-
-    def update_animation(self):
-        self.configure(image=self.frames[self.current_frame])
-        self.current_frame = (self.current_frame + 1) % len(self.frames)
-        self._job = self.after(100, self.update_animation)
-
-    def destroy(self):
-        if self._job is not None:
-            self.after_cancel(self._job)
-            self._job = None
-        super().destroy()
 
 
 class ShareScreen(tk.Tk):
@@ -902,7 +875,8 @@ class ShareScreen(tk.Tk):
 
         # Complex configuration
         screen_width, screen_height = get_resolution_of_primary_monitor()
-        self.geometry(f"{screen_width}x{screen_height}")
+        self.width, self.height = screen_width, screen_height
+        self.geometry(f"{self.width}x{self.height}")
         self.attributes('-fullscreen', True)
         self.resizable(False, False)
         self.protocol("WM_DELETE_WINDOW",on_main_close) # todo: consider changing to opening the main screen again
@@ -925,7 +899,9 @@ class ShareScreenInfoFrame(tk.Frame):
     def __init__(self, parent, height: int, remote: Remote):
         super().__init__(parent)
         self.parent = parent
-        self.configure(height=height, width=SCREEN_WIDTH)
+        self.width = SCREEN_WIDTH
+        self.height = height
+        self.configure(width=self.width, height=self.height)
         self.remote = remote
 
         self.dimensions()
@@ -947,10 +923,10 @@ class ShareScreenCanvasFrame(ttk.Frame):
     def __init__(self, parent, height: int, remote: Remote):
         super().__init__(parent)
         self.parent = parent
-        self.remote = remote
-        self.height = height
         self.width = SCREEN_WIDTH
-        self.configure(height=self.height, width=self.width)
+        self.height = height
+        self.remote = remote
+        self.configure(width=self.width, height=self.height)
 
         self.canvas: Optional[tk.Canvas] = None
         self.canvas_image_id = None
@@ -1051,6 +1027,7 @@ class AdminScreen(tk.Tk):
 class AdminScreenTitleFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.parent = parent
         self.configure(highlightthickness=1, highlightbackground='green')
         self.width, self.height = int(parent.width*3/4),int(parent.height*3/20)
         self.configure(width=self.width, height=self.height)
@@ -1072,6 +1049,7 @@ class AdminScreenTitleFrame(tk.Frame):
 class AdminScreenInfoFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.parent = parent
         self.configure(highlightthickness=1, highlightbackground='red')
         self.width, self.height = int(parent.width*1/4),int(parent.height*3/20)
         self.configure(width=self.width,height=self.height)
@@ -1098,6 +1076,7 @@ class AdminScreenInfoFrame(tk.Frame):
 class AdminScreenContentFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.parent = parent
         self.configure(highlightthickness=1, highlightbackground='blue')
         self.width, self.height = parent.width,int(parent.height*17/20)
         self.configure(width=self.width,height=self.height)
@@ -1153,10 +1132,12 @@ class AdminScreenNotebook(ttk.Notebook):
                     if not self.loaded_initial_logs:
                         with data_handler_lock:
                             d_handler.insert_new_outgoing_message(create_sendable_data(b"", "DB_LOGS_REQUEST", SERVER_CODE))
+                        self.loaded_initial_logs = True
                 case "Users":
                     if not self.loaded_initial_users:
                         with data_handler_lock:
                             d_handler.insert_new_outgoing_message(create_sendable_data(b"", "DB_USERS_REQUEST", SERVER_CODE))
+                        self.loaded_initial_users = True
                 case _:
                     raise Exception("Switched to unfamiliar tab")
 
@@ -1211,9 +1192,6 @@ class ScrollableTableCanvas(tk.Canvas):
         self.parent = parent
         self.table_name = table_name
         self.configure(highlightthickness=0)
-        idata = []
-        for i in range(100):
-            idata.append(gen_random_record())
         self.scrollable_frame = Table(self, ["ID", "Timestamp", "U.ID", "U.Hostname", "Action", "TU.ID", "TU.Hostname"], [])
         match table_name:
             case "Logs":
@@ -1392,6 +1370,7 @@ class OptionsFrame(tk.Frame):
 class AdminScreenNotebookUsers(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.parent = parent
 
         self.dimensions()
         self.create_widgets()

@@ -118,42 +118,6 @@ def get_bare_hostname(ip_addr: str) -> str:
         print(f"Error resolving hostname: {e}")
         return None
 
-def get_code_from_sock(client_ids: Dict[str, socket.socket], sock: socket.socket):
-    return list(client_ids.keys())[list(client_ids.values()).index(sock)]
-
-# todo: move to classes.py
-class FlagObject:
-    def __init__(self, flag):
-        self.flag = flag
-
-    def true(self):
-        self.flag = True
-
-    def false(self):
-        self.flag = False
-
-    def __bool__(self):
-        return self.flag
-
-    def __repr__(self):
-        return f"{self.flag}"
-
-# todo: don't hardcode the rect on the first screen.
-# todo: use screeninfo to find out the coordinate system and from that make a gui to choose monitors
-def send_continuous_screenshots(sock: socket.socket, code: str):
-    screen_width, screen_height = get_resolution_of_primary_monitor()
-    with MSS() as sct:
-        while True:
-            rect = {'top': 0,'left': 0,'width': screen_width,'height': screen_height}
-            new_screenshot = sct.grab(rect)
-            ss_bytes = new_screenshot.rgb
-            ready_data = create_sendable_data(ss_bytes, "IMAGE", code)
-            try:
-                sock.sendall(ready_data)
-            except Exception as e:
-                print(f"Something went wrong with the connection: {e}")
-                break
-
 def get_screenshot_bytes(mss_object: MSS, top, left, width, height):
     rect = {'top': top,'left': left,'width': width,'height': height}
     screenshot = mss_object.grab(rect)
@@ -198,16 +162,6 @@ def apply_consolas_to_widget(widget_type: str, size: int, colour: Optional[str] 
 def transpose(matrix):
     return list(map(list, zip(*matrix)))
 
-# test
-def gen_random_record():
-    id_num = str(r.randint(1, 1000))
-    timestamp = str(int(time.time()))
-    user_id = str(r.randint(1, 1000))
-    user_hostname = f"PC-{r.randint(1, 999)}"
-    action = r.choice(["CONNECTION", "DISCONNECTION"])
-    target_user_id = str(r.randint(1, 1000))
-    target_hostname = f"PC-{r.randint(1, 999)}"
-    return [id_num, timestamp, user_id, user_hostname, action, target_user_id, target_hostname]
 
 def map_coords_to_original(scaled_x,scaled_y,scale_factor):
     original_x = int(scaled_x / scale_factor)

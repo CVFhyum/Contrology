@@ -14,7 +14,7 @@ class DataHandler:
         # Outgoing data queue -> Ready data (with headers)
         self.incoming_data_queue: list = []
         self.outgoing_data_queue: list = []
-        self.last_image_received = None
+        self._last_image_received = None
 
     # Insert data as a tuple (data type, data)
     def insert_new_incoming_message(self, data: tuple[str, str]):
@@ -26,15 +26,11 @@ class DataHandler:
         self.outgoing_data_queue.append(data)
 
     def set_last_image(self, image: bytes):
-        self.last_image_received = image
-
-    def get_most_recent_message(self):
-        if len(self.incoming_data_queue) == 0:
-            raise Exception("No incoming messages are in the queue.")
-        return self.incoming_data_queue.pop(0)
+        self._last_image_received = image
 
     def get_last_image(self):
-        return self.last_image_received
+        return self._last_image_received
+
 
     def send_all_outgoing_data(self, sock: socket.socket):
         for outgoing_data in self.outgoing_data_queue:
