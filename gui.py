@@ -48,6 +48,7 @@ code_flags = thr.Event(), FlagObject(False)
 remote_connection_thread_flags = {}
 remote_thread_id = 0
 logs_table_obj: Any = None
+is_remote = FlagObject(False)
 
 
 def trackvar():
@@ -219,6 +220,8 @@ def handle_general_connection(c: socket.socket):
                                         d_handler.set_last_image(data)
                                 case "CONTROL_EVENT":
                                     data.execute_event()
+                                case "CONNECT_CLOSE":
+                                    is_remote.false()
                                 case "DB_LOGS":
                                     parsed_logs = [list(tup) for tup in data]
                                     logs_table_obj.push_data_to_table(parsed_logs)
@@ -261,7 +264,7 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
         with data_handler_lock:
             d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code,pickled=True))
         with MSS() as mss_obj:
-            while True: # todo: add while code still exists, while controller has not closed, etc.
+            while is_remote:
                 screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
                 screenshot_data = create_sendable_data(screenshot_bytes, "IMAGE", controller_code)
                 with data_handler_lock:
@@ -784,7 +787,7 @@ class RequestFrame(ttk.Frame):
         self.configure(width=parent.parent.winfo_reqwidth(),height=70)
         self.request_type = request_type
         self.event = event
-        self.flag = flag
+        self.flag: FlagObject = flag
         self.waiting_label = None
         self.loading_gif_label = None
         self.connect_button = None
@@ -796,6 +799,7 @@ class RequestFrame(ttk.Frame):
         def accept_connection():
             self.flag.true()
             self.event.set()
+            is_remote.true()
 
         def deny_connection():
             self.flag.false()
@@ -917,11 +921,16 @@ class ShareScreenInfoFrame(tk.Frame):
         now_controlling_label.grid(row=0,column=0)
         hostname_label.grid(row=1, column=0)
         code_label.grid(row=2, column=0)
-        close_connection_button.grid(row=1,column=1,sticky='e')
+        close_connection_button.grid(row=1,column=1,sticky='e',padx=10)
 
     def dimensions(self):
         self.grid_rowconfigure((0,1,2), weight=1)
         self.grid_columnconfigure(1, weight=1)
+
+    def close_connection(self):
+        with data_handler_lock:
+            d_handler.insert_new_outgoing_message(create_sendable_data(b"", "CONNECT_CLOSE", self.remote.code))
+        wm.open_main_screen()
 
 class ShareScreenCanvasFrame(ttk.Frame):
     def __init__(self, parent, height: int, remote: Remote):

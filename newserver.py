@@ -18,17 +18,20 @@ from constants import *
 from message_handler import MessageHandler
 from sql_handler import SQLHandler
 from bidirectional_dict import BidirectionalDict
+from connections import Connection, Connections
 
 # When a socket raises an error, it should be immediately closed gracefully.
-# This function removes it from clients, client_ids, and closes it.
+# This function removes it from clients, sockets_codes_bi_dict, and closes it.
 def handle_sock_closing(closing_sock: socket.socket):
-    user_id = new_client_ids[closing_sock]
+    user_id = sockets_codes_bi_dict[closing_sock]
     user_info = db_handler.get_user_info(user_id=user_id)
-    user_address = user_info["address"]
+    other_code = current_connections.remove_connection_associated_with_code(user_info["code"])
+    if other_code:
+        m_handler.add(create_sendable_data(b"", "CONNECT_CLOSE", other_code))
     db_handler.set_user_connection_status(user_id, False)
-    print(f"[{get_hhmmss()}] Client Disconnected | {get_bare_hostname(user_address)} | {user_address} | {user_info['code']}")
+    print(f"[{get_hhmmss()}] Client Disconnected | {get_bare_hostname(user_info["address"])} | {user_info["address"]} | {user_info["code"]}")
     db_handler.log(user_id=user_info["id"],action="DISCONNECTION")
-    del new_client_ids[user_id]
+    del sockets_codes_bi_dict[user_id]
     clients.remove(closing_sock)
     closing_sock.close()
 
@@ -49,7 +52,7 @@ def handle_client(sock: socket.socket):
         ic(data_type, code)
         # TODO: handle messages that are meant for the server
         # TODO: maybe make a function to handle different data types and what we need to do with them
-        sender_info = db_handler.get_user_info(user_id=new_client_ids[sock])
+        sender_info = db_handler.get_user_info(user_id=sockets_codes_bi_dict[sock])
         target_info = db_handler.get_user_info(code=code)
         if (not db_handler.code_exists(code)) and code not in (ALL_CODE, SERVER_CODE):
             data = create_sendable_data(b"", "CODE_NOT_FOUND", sender_info["code"])
@@ -68,6 +71,8 @@ def handle_client(sock: socket.socket):
                                    action="REQUEST",
                                    target_user_id=target_info['id'])
                 case "CONNECT_ACCEPT":  # Remote --> Controller
+                    new_connection = Connection(remote_code=sender_info["code"], controller_code=target_info["code"])
+                    current_connections.add(new_connection)
                     data = pickle.dumps(data)
                     data = create_sendable_data(data, data_type, code, pickled=True)
                     m_handler.add(data)
@@ -87,6 +92,11 @@ def handle_client(sock: socket.socket):
                 case "CONTROL_EVENT":
                     data = pickle.dumps(data)
                     data = create_sendable_data(data, data_type, code, pickled=True)
+                    m_handler.add(data)
+                case "CONNECT_CLOSE":
+                    current_connections.remove_connection_associated_with_code(sender_info["code"])
+                    data = data.encode('utf-8')
+                    data = create_sendable_data(data, data_type, code)
                     m_handler.add(data)
                 case "DB_LOGS_REQUEST":
                     for chunk_of_rows in db_handler.get_all_logs():
@@ -109,8 +119,8 @@ m_handler = MessageHandler(db_handler)
 
 
 clients = []  # List of all client socket objects
-client_ids = {}  # alphanumeric code: client socket
-new_client_ids = BidirectionalDict() # user id: client socket
+sockets_codes_bi_dict = BidirectionalDict() # user id: client socket
+current_connections = Connections()
 
 
 def main():
@@ -138,7 +148,7 @@ def main():
                         new_code = generate_code(db_handler)
                         user_id = db_handler.add_user(hostname=get_bare_hostname(addr[0]), address=addr[0], code=new_code, is_connected=True)
                         user_info = db_handler.get_user_info(user_id=user_id)
-                    new_client_ids[user_info["id"]] = client
+                    sockets_codes_bi_dict[user_info["id"]] = client
                     db_handler.log(user_id=user_info["id"],
                                    action="CONNECTION")
                     m_handler.add(create_sendable_data(b"", "INITIAL_ACCEPT", new_code))  # Send client initialisation packet
@@ -148,7 +158,7 @@ def main():
                 else:  # Incoming data from existing client, so handle them
                     handle_client(sock)
             # End
-            m_handler.send_all(new_client_ids)
+            m_handler.send_all(sockets_codes_bi_dict)
     except KeyboardInterrupt:
         print("Server interrupted...")
     finally:

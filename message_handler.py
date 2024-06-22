@@ -9,8 +9,6 @@ import socket
 
 class MessageHandler:
     def __init__(self, db_handler):
-        # message_queue is a dictionary
-        # {client_code: data_to_send}
         self.message_queue: list[bytes] = []
         self.db_handler: SQLHandler = db_handler
 
