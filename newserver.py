@@ -27,7 +27,7 @@ def handle_sock_closing(closing_sock: socket.socket):
     user_address = user_info["address"]
     db_handler.set_user_connection_status(user_id, False)
     print(f"[{get_hhmmss()}] Client Disconnected | {get_bare_hostname(user_address)} | {user_address} | {user_info['code']}")
-    db_handler.log(user_id=user_info["id"],user_hostname=user_info["hostname"],action="DISCONNECTION")
+    db_handler.log(user_id=user_info["id"],action="DISCONNECTION")
     del new_client_ids[user_id]
     clients.remove(closing_sock)
     closing_sock.close()
@@ -65,28 +65,22 @@ def handle_client(sock: socket.socket):
                     data = create_sendable_data(data, data_type, code)
                     m_handler.add(data)
                     db_handler.log(user_id=sender_info['id'],
-                                   user_hostname=sender_info['hostname'],
                                    action="REQUEST",
-                                   target_user_id=target_info['id'],
-                                   target_user_hostname=target_info['hostname'])
+                                   target_user_id=target_info['id'])
                 case "CONNECT_ACCEPT":  # Remote --> Controller
                     data = pickle.dumps(data)
                     data = create_sendable_data(data, data_type, code, pickled=True)
                     m_handler.add(data)
                     db_handler.log(user_id=sender_info['id'],
-                                   user_hostname=sender_info['hostname'],
                                    action="ACCEPT_REQUEST",
-                                   target_user_id=target_info['id'],
-                                   target_user_hostname=target_info['hostname'])
+                                   target_user_id=target_info['id'])
                 case "CONNECT_DENY":  # Remote --> Controller
                     data = data.encode('utf-8')  # Encode the data
                     data = create_sendable_data(data,data_type,code)  # Wrap the data so it's ready to be resent
                     m_handler.add(data)
                     db_handler.log(user_id=sender_info['id'],
-                                   user_hostname=sender_info['hostname'],
                                    action="DENY_REQUEST",
-                                   target_user_id=target_info['id'],
-                                   target_user_hostname=target_info['hostname'])
+                                   target_user_id=target_info['id'])
                 case "IMAGE":
                     data = create_sendable_data(data, data_type, code)
                     m_handler.add(data)
@@ -146,7 +140,6 @@ def main():
                         user_info = db_handler.get_user_info(user_id=user_id)
                     new_client_ids[user_info["id"]] = client
                     db_handler.log(user_id=user_info["id"],
-                                   user_hostname=user_info["hostname"],
                                    action="CONNECTION")
                     m_handler.add(create_sendable_data(b"", "INITIAL_ACCEPT", new_code))  # Send client initialisation packet
                     clients.append(client)

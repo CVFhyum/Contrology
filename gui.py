@@ -261,9 +261,9 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
         with data_handler_lock:
             d_handler.insert_new_outgoing_message(create_sendable_data(info_bytes,"CONNECT_ACCEPT",controller_code,pickled=True))
         with MSS() as mss_obj:
-            while True: # todo: change this to be put in a thread. add while code still exists, while controller has not closed, etc.
+            while True: # todo: add while code still exists, while controller has not closed, etc.
                 screenshot_bytes = get_screenshot_bytes(mss_obj, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-                screenshot_data = create_sendable_data(screenshot_bytes, "IMAGE",controller_code)
+                screenshot_data = create_sendable_data(screenshot_bytes, "IMAGE", controller_code)
                 with data_handler_lock:
                     d_handler.insert_new_outgoing_message(screenshot_data)
     else:
@@ -276,13 +276,13 @@ def handle_remote_connection(controller_code, controller_hostname, thread_name):
 def handle_controlling_connection(remote_code):
     temp_message_setter = partial(set_temporary_message, var=connect_feedback_var, old_text="", wait_seconds=2)
     if remote_code == self_code:
-        temp_message_setter(new_text="You cannot give your own code!")
+        temp_message_setter(new_text="You cannot enter your own code!")
     else:
         # TODO: make sure that the same machine isn't receiving a request multiple times
         with data_handler_lock:
             d_handler.insert_new_outgoing_message(create_sendable_data(b"","CONNECT_REQUEST",remote_code))
         code_event, code_flag = code_flags
-        event,flag = controlling_connection_thread_flags
+        event, flag = controlling_connection_thread_flags
         code_event.wait()
         code_event.clear()
         if code_flag:
@@ -584,6 +584,7 @@ class MainScreenConnectFrame(tk.Frame):
     def set_up_controlling_thread(self):
         controlling_connection_thread = thr.Thread(target=handle_controlling_connection,args=(self.connect_code_var.get(),))
         controlling_connection_thread.start()
+
 class MainScreenUtilitiesFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -911,13 +912,16 @@ class ShareScreenInfoFrame(tk.Frame):
         now_controlling_label = ttk.Label(self, text="Now controlling", font=consolas(10))
         hostname_label = ttk.Label(self, text=self.remote.hostname, font=consolas(12))
         code_label = ttk.Label(self, text=self.remote.code, font=consolas(12))
+        close_connection_button = ttk.Button(self, text="Close Connection", style=apply_consolas_to_widget("Button", 12, "red"))
 
         now_controlling_label.grid(row=0,column=0)
         hostname_label.grid(row=1, column=0)
         code_label.grid(row=2, column=0)
+        close_connection_button.grid(row=1,column=1,sticky='e')
 
     def dimensions(self):
         self.grid_rowconfigure((0,1,2), weight=1)
+        self.grid_columnconfigure(1, weight=1)
 
 class ShareScreenCanvasFrame(ttk.Frame):
     def __init__(self, parent, height: int, remote: Remote):
@@ -1192,7 +1196,7 @@ class ScrollableTableCanvas(tk.Canvas):
         self.parent = parent
         self.table_name = table_name
         self.configure(highlightthickness=0)
-        self.scrollable_frame = Table(self, ["ID", "Timestamp", "U.ID", "U.Hostname", "Action", "TU.ID", "TU.Hostname"], [])
+        self.scrollable_frame = Table(self, ["ID", "Timestamp", "U.ID", "Action", "TU.ID"], [])
         match table_name:
             case "Logs":
                 logs_table_obj = self.scrollable_frame
@@ -1344,9 +1348,6 @@ class Table(tk.Frame):
         for idx, data_frame in enumerate(self.data_frames):
             data_frame.grid(row=idx+1, column=0, sticky='ew')
         self.set_labels_to_highest_width()
-
-
-
 
     def dimensions(self):
         self.grid_columnconfigure(0, weight=1)

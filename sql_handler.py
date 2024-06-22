@@ -80,10 +80,8 @@ class SQLHandler:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp REAL NOT NULL,
             user_id INTEGER NOT NULL,
-            user_hostname TEXT NOT NULL,
             action TEXT NOT NULL,
             target_user_id INTEGER,
-            target_user_hostname TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (target_user_id) REFERENCES users(id)
         )
@@ -143,13 +141,13 @@ class SQLHandler:
         query = "UPDATE users SET is_connected = 0"
         self.execute_query(query)
 
-    def log(self,*,user_id,user_hostname,action,target_user_id=None,target_user_hostname=None):
+    def log(self,*,user_id,action,target_user_id=None):
         timestamp = time.time()  # Get current time as float
         query = """
-        INSERT INTO logs (timestamp, user_id, user_hostname, action, target_user_id, target_user_hostname)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO logs (timestamp, user_id, action, target_user_id)
+        VALUES (?, ?, ?, ?)
         """
-        params = (timestamp,user_id,user_hostname,action,target_user_id,target_user_hostname)
+        params = (timestamp,user_id,action,target_user_id)
         self.execute_query(query,params)
 
     def get_all_logs(self):
