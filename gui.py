@@ -32,6 +32,7 @@ from random import randint as ri
 from mss.windows import MSS
 from functools import partial
 import argon2
+import warnings
 
 t = time()
 # Global variables that can be accessed all throughout the code
@@ -49,6 +50,7 @@ remote_connection_thread_flags = {}
 remote_thread_id = 0
 logs_table_obj: Any = None
 is_remote = FlagObject(False)
+is_controller = FlagObject(False)
 
 
 def trackvar():
@@ -82,7 +84,7 @@ class WindowManager:
     @launch_screen_root.setter
     def launch_screen_root(self,value):
         if value is not None and self.launch_screen_root is not None:
-            raise ValueError("Launch Screen Root modify attempt failed")
+            warnings.warn("Launch Screen Root was overwritten")
         self._launch_screen_root = value
         self._roots[0] = value
 
@@ -93,7 +95,7 @@ class WindowManager:
     @main_screen_root.setter
     def main_screen_root(self,value):
         if value is not None and self.main_screen_root is not None:
-            raise ValueError("Main Screen Root modify attempt failed")
+            warnings.warn("Main Screen Root was overwritten")
         self._main_screen_root = value
         self._roots[1] = value
 
@@ -104,7 +106,7 @@ class WindowManager:
     @share_screen_root.setter
     def share_screen_root(self,value):
         if value is not None and self.share_screen_root is not None:
-            raise ValueError("Share Screen Root modify attempt failed")
+            warnings.warn("Share Screen Root was overwritten")
         self._share_screen_root = value
         self._roots[2] = value
 
@@ -115,7 +117,7 @@ class WindowManager:
     @admin_screen_root.setter
     def admin_screen_root(self,value):
         if value is not None and self.admin_screen_root is not None:
-            raise ValueError("Admin Screen Root modify attempt failed")
+            warnings.warn("Admin Screen Root was overwritten")
         self._admin_screen_root = value
         self._roots[3] = value
 
@@ -851,6 +853,7 @@ class RequestFrame(ttk.Frame):
         self.connect_button.grid()
 
     def accept_control(self):
+        is_controller.true()
         self.parent.remove_request_frame(self)
         wm.open_share_screen()
 
@@ -916,7 +919,7 @@ class ShareScreenInfoFrame(tk.Frame):
         now_controlling_label = ttk.Label(self, text="Now controlling", font=consolas(10))
         hostname_label = ttk.Label(self, text=self.remote.hostname, font=consolas(12))
         code_label = ttk.Label(self, text=self.remote.code, font=consolas(12))
-        close_connection_button = ttk.Button(self, text="Close Connection", style=apply_consolas_to_widget("Button", 12, "red"))
+        close_connection_button = ttk.Button(self, text="Close Connection", style=apply_consolas_to_widget("Button", 12, "red"), command=self.close_connection)
 
         now_controlling_label.grid(row=0,column=0)
         hostname_label.grid(row=1, column=0)
@@ -928,6 +931,7 @@ class ShareScreenInfoFrame(tk.Frame):
         self.grid_columnconfigure(1, weight=1)
 
     def close_connection(self):
+        is_controller.false()
         with data_handler_lock:
             d_handler.insert_new_outgoing_message(create_sendable_data(b"", "CONNECT_CLOSE", self.remote.code))
         wm.open_main_screen()
@@ -970,14 +974,17 @@ class ShareScreenCanvasFrame(ttk.Frame):
 
     def load_latest_image(self):
         # todo: add checks to make sure that the remote is still connected
-        while accept_data and connected:
+        while is_controller:
             with data_handler_lock:
                 new_image = d_handler.get_last_image()
-            new_image = Image.frombytes("RGB", (self.remote.res_width, self.remote.res_height), new_image)
-            new_image = new_image.resize((self.resized_width, self.resized_height),Image.Resampling.LANCZOS)
-            self.display_image = ImageTk.PhotoImage(new_image)
-            self.canvas.itemconfig(self.canvas_image_id, image=self.display_image)
-            self.canvas.image = self.display_image
+            try:
+                new_image = Image.frombytes("RGB", (self.remote.res_width, self.remote.res_height), new_image)
+                new_image = new_image.resize((self.resized_width, self.resized_height),Image.Resampling.LANCZOS)
+                self.display_image = ImageTk.PhotoImage(new_image)
+                self.canvas.itemconfig(self.canvas_image_id, image=self.display_image)
+                self.canvas.image = self.display_image
+            except (tk.TclError, RuntimeError) as e:
+                print(e)
 
     def on_canvas_event(self, event):
         if event.type == tk.EventType.ButtonPress:  # Mouse click
@@ -1129,7 +1136,7 @@ class AdminScreenNotebook(ttk.Notebook):
         self.users_tab = AdminScreenNotebookUsers(self)
 
         self.add(self.logs_tab, text="Logs", image=self.logs_tab_logo, compound='left')
-        self.add(self.users_tab, text="Users", image=self.users_tab_logo, compound='left')
+        #self.add(self.users_tab, text="Users", image=self.users_tab_logo, compound='left')
 
         self.bind("<<NotebookTabChanged>>", self.on_tab_change)
 

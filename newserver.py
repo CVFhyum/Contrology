@@ -26,10 +26,11 @@ def handle_sock_closing(closing_sock: socket.socket):
     user_id = sockets_codes_bi_dict[closing_sock]
     user_info = db_handler.get_user_info(user_id=user_id)
     other_code = current_connections.remove_connection_associated_with_code(user_info["code"])
+    ic(other_code)
     if other_code:
         m_handler.add(create_sendable_data(b"", "CONNECT_CLOSE", other_code))
     db_handler.set_user_connection_status(user_id, False)
-    print(f"[{get_hhmmss()}] Client Disconnected | {get_bare_hostname(user_info["address"])} | {user_info["address"]} | {user_info["code"]}")
+    print(f"[{get_hhmmss()}] Client Disconnected | {get_bare_hostname(user_info['address'])} | {user_info['address']} | {user_info['code']}")
     db_handler.log(user_id=user_info["id"],action="DISCONNECTION")
     del sockets_codes_bi_dict[user_id]
     clients.remove(closing_sock)
@@ -54,6 +55,8 @@ def handle_client(sock: socket.socket):
         # TODO: maybe make a function to handle different data types and what we need to do with them
         sender_info = db_handler.get_user_info(user_id=sockets_codes_bi_dict[sock])
         target_info = db_handler.get_user_info(code=code)
+        ic(code)
+        ic(db_handler.code_exists(code))
         if (not db_handler.code_exists(code)) and code not in (ALL_CODE, SERVER_CODE):
             data = create_sendable_data(b"", "CODE_NOT_FOUND", sender_info["code"])
             m_handler.add(data)

@@ -3,6 +3,12 @@ class Connection:
         self.remote_code = remote_code
         self.controller_code = controller_code
 
+    def __repr__(self):
+        return f"{self.remote_code=}, {self.controller_code=}"
+
+    def __str__(self):
+        return self.__repr__()
+
 class Connections:
     def __init__(self):
         self.connections: list[Connection] = []
@@ -31,6 +37,12 @@ class Connections:
             controller_code = connection.controller_code
             if code == remote_code or code == controller_code:
                 self.connections.remove(connection)
-                return remote_code if code == remote_code else controller_code  # return the code of the user that was connected to the removed user
+                return remote_code if code == controller_code else remote_code  # return the code of the user that was connected to the removed user
         return False
+
+    def __repr__(self):
+        return repr(self.connections)
+
+    def __str__(self):
+        return self.__repr__()
 
